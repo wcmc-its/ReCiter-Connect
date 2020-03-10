@@ -1,6 +1,5 @@
 package org.vivoweb.harvester.ingest;
 
-
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -16,20 +15,21 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Properties;
 import java.util.stream.Collectors;
 import java.util.Map.Entry;
 import org.apache.commons.lang.StringEscapeUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.vivoweb.harvester.connectionfactory.JenaConnectionFactory;
-import org.vivoweb.harvester.connectionfactory.MssqlConnectionFactory;
-import org.vivoweb.harvester.connectionfactory.RDBMSConnectionFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
+
+import lombok.extern.slf4j.Slf4j;
+
 import com.hp.hpl.jena.query.QuerySolution;
 import com.hp.hpl.jena.query.ResultSet;
 
 import reciter.connect.beans.vivo.GrantBean;
+import reciter.connect.database.mssql.MssqlConnectionFactory;
+import reciter.connect.database.mysql.jena.JenaConnectionFactory;
 
 /**
  * @author Sarbajit Dutta (szd2013@med.cornell.edu)
@@ -37,6 +37,8 @@ import reciter.connect.beans.vivo.GrantBean;
  * Since the people data comes from ED the data that is used by this class is for faculty who are active in ED.
  * Also, the organization structure uses the old org-hierarchy scripts used in D2RMAP. For updates the data checks for new contributors and date end(for now).<p><b><i>
  */
+@Slf4j
+@Component
 public class GrantsFetchFromED {
 	
 	public static String propertyFilePath = null;
@@ -48,24 +50,25 @@ public class GrantsFetchFromED {
 	private int insertCount = 0;
 	private int updateCount = 0;
 	
-	private Connection con = null;
-	
 	/**
 	 * MySql connection factory object for all the mysql related connections
 	 */
-	MssqlConnectionFactory mcf = MssqlConnectionFactory.getInstance(propertyFilePath);
+	@Autowired
+	private MssqlConnectionFactory mcf;
 	
 	/**
 	 * Jena connection factory object for all the apache jena sdb related connections
 	 */
-	JenaConnectionFactory jcf = JenaConnectionFactory.getInstance(propertyFilePath);
+	@Autowired
+	private JenaConnectionFactory jcf;
+
+	@Autowired
+	private EdDataInterface edi;
 	
 	/**
 	 * The default namespace for VIVO
 	 */
 	private String vivoNamespace = JenaConnectionFactory.nameSpace;
-	
-	Connection asmsCon = MssqlConnectionFactory.getConnectionForAsms(propertyFilePath);
 	
 	
 	/**
@@ -80,65 +83,22 @@ public class GrantsFetchFromED {
 	 * This sets todays date for harvested date
 	 */
 	private String strDate = this.sdf.format(this.now);
-	
-	
-	
-
-	private Properties props = new Properties();
-	private static Logger log = LoggerFactory.getLogger(GrantsFetchFromED.class);
-	
-	
-	
-	/**
-	 * Main method
-	 * 
-	 * @param args
-	 *            command-line arguments
-	 */
-	public static void main (String args[]) {
-		if (args.length == 0) {
-			log.info("Usage: java ingest.GrantsFetchFromED [properties filename]");
-			log.info("e.g. java ingest.GrantsFetchFromED /usr/share/vivo-ed-people/examples/wcmc_people.properties");
-		} else if (args.length == 1) { // path of the properties file
-			propertyFilePath = args[0];
-			new GrantsFetchFromED().init(args[0]);
-			
-		}
-	}
-		
-		
-		/**
-		 * Initializes all the required variables 
-		 * @param propertiesFile The location of property file
-		 */
-		private void init(String propertiesFile) {
-			if(this.vivoNamespace == null) {
-				log.info("Please provide a namespace in property file");
-			}
-			else {
-				execute();
-			}
-
-		}
 		
 		/**
 		 * This is the main execution method of the class
 		 */
-		private void execute() {
+		public void execute() {
 			
 			
 			List<GrantBean> grant = null;
 			
 			//Initialize connection pool and fill it with connection
-			this.con = this.mcf.getConnectionfromPool();
-			
-			EdDataInterface edi = new EdDataInterfaceImpl();
-			this.people = edi.getPeopleInVivo(propertyFilePath, this.jcf);
+			this.people = this.edi.getPeopleInVivo(this.jcf);
 			Iterator<String> it = this.people.iterator();
 			while(it.hasNext()) {
 				String cwid = it.next().trim();
-			    log.info("#########################################################");
-			    log.info("Trying to fetch grants for cwid - " + cwid);
+				log.info("#########################################################");
+				log.info("Trying to fetch grants for cwid - " + cwid);
 				grant = getGrantsFromCoeus(cwid);
 				if(grant.isEmpty())
 					log.info("There is no grants for cwid - " + cwid + " in Coeus");
@@ -155,26 +115,7 @@ public class GrantsFetchFromED {
 		checkGrantExistInVivo(grant,"arj2005");
 		deleteConfidentialGrants(grant, "arj2005");
 		log.info("#########################################################");*/
-			
-			//Destory mysql connection pool
-			if(this.con!=null) {
-				this.mcf.returnConnectionToPool(this.con);
-				this.mcf.destroyConnectionPool();
-			}
-			
-			//Destroy jena connection pool
-			if(this.jcf != null)
-				this.jcf.destroyConnectionPool();
-			
-			if(this.asmsCon != null) {
-				try {
-					this.asmsCon.close();
-				} catch (SQLException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-			}
-			
+
 			log.info("Total new grants inserted into VIVO: " + this.insertCount);
 			log.info("Total existing grants that were updated: " + this.updateCount);
 			
@@ -282,7 +223,6 @@ public class GrantsFetchFromED {
 				}
 				
 			} catch(IOException e) {
-				// TODO Auto-generated catch block
 				log.error("IOException" ,e);
 			}
 			
@@ -1136,6 +1076,7 @@ public class GrantsFetchFromED {
 		 */
 		private List<GrantBean> getGrantsFromCoeus(String cwid) {
 			
+			Connection con = mcf.getConnectionfromPool("INFOED");
 			List<GrantBean> grant = new ArrayList<GrantBean>();
 			
 			StringBuilder selectQuery = new StringBuilder();
@@ -1158,7 +1099,7 @@ public class GrantsFetchFromED {
 			PreparedStatement ps = null;
 			java.sql.ResultSet rs = null;
 			try {
-				ps = this.con.prepareStatement(selectQuery.toString());
+				ps = con.prepareStatement(selectQuery.toString());
 				rs = ps.executeQuery();
 				while(rs.next()) {
 					GrantBean gb = new GrantBean();
@@ -1219,6 +1160,8 @@ public class GrantsFetchFromED {
 						ps.close();
 					if(rs!=null)
 						rs.close();
+					if(con != null)
+						mcf.returnConnectionToPool("INFOED", con);
 				}
 				catch(Exception e) {
 					log.error("Exception",e);
@@ -1238,7 +1181,7 @@ public class GrantsFetchFromED {
 		 * @return a map of contributors having cwid and contributor type
 		 */
 		private Map<String, String> getContributors(GrantBean gb, String accountNumber) {
-			
+			Connection con = mcf.getConnectionfromPool("INFOED");
 			Map<String, String> contributors = new HashMap<String, String>();
 			String contributor = null;
 			
@@ -1261,7 +1204,7 @@ public class GrantsFetchFromED {
 			PreparedStatement ps = null;
 			java.sql.ResultSet rs = null;
 			try {
-					ps = this.con.prepareStatement(selectQuery.toString());
+					ps = con.prepareStatement(selectQuery.toString());
 					rs = ps.executeQuery();
 					while(rs.next()) {
 						if(rs.getString(1) != null)
@@ -1275,7 +1218,6 @@ public class GrantsFetchFromED {
 					}
 				}
 			catch(SQLException e) {
-				// TODO Auto-generated catch block
 				log.error("SQLException" , e);
 			}
 			finally {
@@ -1284,6 +1226,8 @@ public class GrantsFetchFromED {
 						ps.close();
 					if(rs!=null)
 						rs.close();
+					if(con != null)
+						mcf.returnConnectionToPool("INFOED", con);
 				}
 				catch(Exception e) {
 					log.error("Exception",e);
@@ -1308,7 +1252,7 @@ public class GrantsFetchFromED {
 		 * @return the deptID
 		 */
 		private String getDepartmentCode(String deptName, String unitCode, GrantBean gb) {
-			
+			Connection con = mcf.getConnectionfromPool("ASMS");
 			String deptId = null;
 			java.sql.ResultSet rs = null;
 			Statement st = null;
@@ -1339,7 +1283,7 @@ public class GrantsFetchFromED {
 			//log.info(selectQuery);
 			
 				try {
-					st = this.asmsCon.createStatement();
+					st = con.createStatement();
 					rs = st.executeQuery(selectQuery);
 					if(rs!=null) { 
 						if(rs.next()){
@@ -1360,6 +1304,8 @@ public class GrantsFetchFromED {
 								rs.close();
 							if(st != null)
 								st.close();
+							if(con != null)
+								mcf.returnConnectionToPool("ASMS", con);
 						} catch(SQLException e) {
 							log.error("Error in closing connections:", e);
 						}

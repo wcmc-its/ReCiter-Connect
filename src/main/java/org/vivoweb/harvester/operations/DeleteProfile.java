@@ -19,16 +19,17 @@ import org.apache.commons.lang.StringEscapeUtils;
 import org.openjena.atlas.logging.Log;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.vivoweb.harvester.ingest.EdDataInterface;
 import org.vivoweb.harvester.ingest.EdDataInterfaceImpl;
-import org.vivoweb.harvester.connectionfactory.JenaConnectionFactory;
-import org.vivoweb.harvester.connectionfactory.LDAPConnectionFactory;
-import org.vivoweb.harvester.connectionfactory.RDBMSConnectionFactory;
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
 import com.hp.hpl.jena.query.*;
 import com.unboundid.ldap.sdk.SearchResultEntry;
 
 import reciter.connect.beans.vivo.delete.profile.PublicationBean;
+import reciter.connect.database.ldap.LDAPConnectionFactory;
+import reciter.connect.database.mysql.MysqlConnectionFactory;
+import reciter.connect.database.mysql.jena.JenaConnectionFactory;
 
 
 
@@ -60,7 +61,8 @@ public class DeleteProfile {
 	/**
 	 * Jena connection factory object for all the apache jena sdb related connections
 	 */
-	JenaConnectionFactory jcf = JenaConnectionFactory.getInstance(propertyFilePath);
+	@Autowired
+	private JenaConnectionFactory jcf;
 	
 	/**
 	 * The default namespace for VIVO
@@ -70,12 +72,15 @@ public class DeleteProfile {
 	/**
 	 * <i>This is a connection factory object to get ldap connection to Enterprise Directory</i>
 	 */
-	LDAPConnectionFactory lcf = LDAPConnectionFactory.getInstance(propertyFilePath);
+	private LDAPConnectionFactory lcf;
+
+	@Autowired
+	private EdDataInterface edi;
 	
 	/**
 	 * <i> Connection factory object to get connections to PubAdmin </i>
 	 */
-	RDBMSConnectionFactory mcf = RDBMSConnectionFactory.getInstance(propertyFilePath);
+	private MysqlConnectionFactory mcf;
 	
 	/**
 	 * SLF4J Logger
@@ -1044,8 +1049,7 @@ public class DeleteProfile {
 		int inActiveCount = 0;
 		int activeCount = 0;
 		this.con = this.mcf.getConnectionfromPool();
-		EdDataInterface edi = new EdDataInterfaceImpl();
-		List<String> people = edi.getPeopleInVivo(propertyFilePath, this.jcf);
+		List<String> people = edi.getPeopleInVivo(this.jcf);
 		if(people.isEmpty())
 			logger.info("No People needs to be deleted");
 		

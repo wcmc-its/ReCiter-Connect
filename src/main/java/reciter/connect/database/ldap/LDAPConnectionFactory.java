@@ -1,16 +1,31 @@
-package org.vivoweb.harvester.connectionfactory;
+/*******************************************************************************
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *******************************************************************************/
+package reciter.connect.database.ldap;
 
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
-import java.util.Properties;
 import java.util.Vector;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import javax.inject.Inject;
+
 import com.unboundid.ldap.sdk.LDAPConnection;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.LDAPSearchException;
@@ -21,54 +36,62 @@ import com.unboundid.ldap.sdk.SearchScope;
 import com.unboundid.util.ssl.SSLUtil;
 import com.unboundid.util.ssl.TrustAllTrustManager;
 
-/**
- * @author Sarbajit Dutta <szd2013@med.cornell.edu>
- * <p><b><i>This class creates and manages connections for LDAP related connections. You can create , get , return and remove connection from pool with different
- * functional methods.<p><b><i>
- *
- */
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import org.springframework.context.annotation.Scope;
+import org.springframework.core.env.Environment;
+import org.springframework.stereotype.Component;
+
+@Component
+@Scope(value = ConfigurableBeanFactory.SCOPE_SINGLETON)
 public class LDAPConnectionFactory {
-	
-	private static Properties props = new Properties();
-	private static Logger logger = LoggerFactory.getLogger(LDAPConnectionFactory.class);
 
-	private static String ldapBindDn = null;
-	private static String ldapBindPassword = null;
-	private static String ldapHostname = null;
-	private static int ldapPort = 0;
-	private static String baseDN = null; 
-	
-	private String propertyFilePath = null;
-	
-	private Vector<LDAPConnection> connectionPool = new Vector<LDAPConnection>(); 
-	
-	private static LDAPConnectionFactory instance = null;
-	
-	protected LDAPConnectionFactory() {
-		
-	}
-	
-	/**
-	 * @param propertyFilePath the path of property file
-	 * @return an instance of LDAP connection
-	 * This method returns a singleton object
-	 */
-	public static LDAPConnectionFactory getInstance(String propertyFilePath) {
-		if(instance == null)
-			instance = new LDAPConnectionFactory(propertyFilePath);
-		
-		return instance;
-	}
-	
-	
-	/**
+	private static final Logger slf4jLogger = LoggerFactory.getLogger(LDAPConnectionFactory.class);
+
+    private String ldapBindDn;
+    private Integer ldapPort;
+    private String ldapBindPassword;
+
+    private String ldapHostname;
+
+	private String ldapbaseDn;
+    
+    private Vector<LDAPConnection> connectionPool = new Vector<LDAPConnection>(); 
+    
+    /**
 	 * @param propertyFilePath the path of property file
 	 */
-	public LDAPConnectionFactory(String propertyFilePath) {
-		this.propertyFilePath = propertyFilePath;
-		initialize();
+    @Inject
+    @Autowired(required=true)
+	public LDAPConnectionFactory(@Value("${ldap.bind.dn}") String ldapBindDn, @Value("${ldap.port}") int ldapPort, Environment env,
+			@Value("${ldap.hostname}") String ldapHostname, @Value("${ldap.base.dn}") String ldapbaseDn) {
+        this.ldapbaseDn = ldapbaseDn;
+        this.ldapBindDn = ldapBindDn;
+        this.ldapBindPassword = env.getProperty("LDAP_BIND_PASSWORD");
+        this.ldapHostname = ldapHostname;
+        this.ldapPort = ldapPort;
+        initialize();
 	}
 
+    public LDAPConnection createConnection() {
+
+		LDAPConnection connection = null;
+		try {
+			SSLUtil sslUtil = new SSLUtil(new TrustAllTrustManager());
+			connection = new LDAPConnection(sslUtil.createSSLSocketFactory());
+			connection.connect(ldapHostname, ldapPort);
+			connection.bind(ldapBindDn, ldapBindPassword);
+
+		} catch (LDAPException e) {
+			slf4jLogger.error("LDAPConnection error", e);
+		} catch (GeneralSecurityException e) {
+			slf4jLogger.error("Error connecting via SSL to LDAP", e);
+		}
+		return connection;
+	}
 	
 	/**
 	 * This method initializes and creates and populates the connection pool
@@ -83,10 +106,10 @@ public class LDAPConnectionFactory {
 	 */
 	private void initializeConnectionPool() {
 		while(!checkIfConnectionPoolIsFull()) {
-			logger.info("LDAP Connection pool is not full. Proceeding with adding new connection");
-			this.connectionPool.addElement(getConnection(this.propertyFilePath));
+			slf4jLogger.info("LDAP Connection pool is not full. Proceeding with adding new connection");
+			this.connectionPool.addElement(getConnection());
 		}
-		logger.info("LDAP Connection pool is full");
+		slf4jLogger.info("LDAP Connection pool is full");
 	}
 	
 	/**
@@ -94,7 +117,7 @@ public class LDAPConnectionFactory {
 	 * @return boolean
 	 */
 	private synchronized boolean checkIfConnectionPoolIsFull() {
-		final int MAX_POOL_SIZE = 1;
+		final int MAX_POOL_SIZE = 2;
 		if(this.connectionPool.size()<MAX_POOL_SIZE)
 			return false;
 		else
@@ -134,23 +157,10 @@ public class LDAPConnectionFactory {
 				con.close();
 		}
 		this.connectionPool.removeAllElements();
-		logger.info("All LDAP connection was destroyed");
+		slf4jLogger.info("All LDAP connection was destroyed");
 	} 
 	
-	public static LDAPConnection getConnection(String propertyFilePath) {
-		try {
-			props.load(new FileInputStream(propertyFilePath));
-		} catch (FileNotFoundException fe) {
-			logger.info("File not found error: " + fe);
-		} catch (IOException e) {
-			logger.info("IOException error: " + e);
-		}
-		
-		ldapBindDn = props.getProperty("bindDN");
-		ldapBindPassword = props.getProperty("bindPassword");
-		baseDN = props.getProperty("ldapBaseDN");
-		ldapHostname = props.getProperty("ldapHostname");
-		ldapPort = Integer.parseInt(props.getProperty("ldapPort"));
+	public LDAPConnection getConnection() {
 		
 		LDAPConnection connection = null;
 		try {
@@ -160,9 +170,9 @@ public class LDAPConnectionFactory {
 			connection.bind(ldapBindDn, ldapBindPassword);
 			
 		} catch (LDAPException e) {
-			logger.error("LDAPConnection error", e);
+			slf4jLogger.error("LDAPConnection error", e);
 		} catch (GeneralSecurityException e) {
-			logger.error("Error connecting via SSL to LDAP", e);
+			slf4jLogger.error("Error connecting via SSL to LDAP", e);
 		}
 		return connection;
 	}
@@ -173,8 +183,8 @@ public class LDAPConnectionFactory {
 	 * @param filter A valid LDAP filter string
 	 * @return a {@code List} of {@code SearchResultEntry} objects.
 	 */
-	public List<SearchResultEntry> search(final String filter, String propertyFilePath) {
-		return search(filter, this.baseDN, propertyFilePath, SearchScope.SUBORDINATE_SUBTREE, "*","modifyTimestamp");
+	public List<SearchResultEntry> search(final String filter) {
+		return search(filter, ldapbaseDn, SearchScope.SUBORDINATE_SUBTREE, "*","modifyTimestamp");
 	}
 
 	/**
@@ -186,7 +196,7 @@ public class LDAPConnectionFactory {
 	 * @return a {@code List} of {@code SearchResultEntry} objects.
 	 */
 	public List<SearchResultEntry> searchWithBaseDN(final String filter, String basedn) {
-		return search(filter, basedn, propertyFilePath, SearchScope.SUBORDINATE_SUBTREE, "*","modifyTimestamp");
+		return search(filter, basedn, SearchScope.SUBORDINATE_SUBTREE, "*","modifyTimestamp");
 	}
 
 	/**
@@ -200,19 +210,21 @@ public class LDAPConnectionFactory {
 	 * LDAP
 	 * @return a {@code List} of {@code SearchResultEntry} objects.
 	 */
-	public List<SearchResultEntry> search(final String filter, final String base, String propertyFilePath, SearchScope scope, String... attributes) {
+	public List<SearchResultEntry> search(final String filter, final String base, SearchScope scope, String... attributes) {
 		LDAPConnection connection = null;
 		try {
 			SearchRequest searchRequest = new SearchRequest(base, scope, filter, attributes);
 			//connection = LDAPConnectionFactory.getConnection(propertyFilePath);
 			connection = getConnectionfromPool();
-			SearchResult results = connection.search(searchRequest);
-			List<SearchResultEntry> entries = results.getSearchEntries();
-			return entries;
+			if(connection != null) {
+				SearchResult results = connection.search(searchRequest);
+				List<SearchResultEntry> entries = results.getSearchEntries();
+				return entries;
+			}
 		} catch (LDAPSearchException e) {
-			logger.error("LDAPSearchException", e);
+			slf4jLogger.error("LDAPSearchException", e);
 		} catch (LDAPException e) {
-			logger.error("LDAPException", e);
+			slf4jLogger.error("LDAPException", e);
 		} finally {
 			if (connection != null) {
 				returnConnectionToPool(connection);
@@ -220,6 +232,4 @@ public class LDAPConnectionFactory {
 		}
 		return Collections.emptyList();
 	}
-	
-	
 }

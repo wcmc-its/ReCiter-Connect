@@ -1,6 +1,5 @@
 package org.vivoweb.harvester.ingest;
 
-
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -13,19 +12,19 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.apache.commons.lang.StringEscapeUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.vivoweb.harvester.connectionfactory.JenaConnectionFactory;
-import org.vivoweb.harvester.connectionfactory.LDAPConnectionFactory;
-import org.vivoweb.harvester.connectionfactory.MssqlConnectionFactory;
-import org.vivoweb.harvester.connectionfactory.RDBMSConnectionFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import reciter.connect.beans.vivo.*;
+import reciter.connect.database.ldap.LDAPConnectionFactory;
+import reciter.connect.database.mssql.MssqlConnectionFactory;
+import reciter.connect.database.mysql.jena.JenaConnectionFactory;
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
+
+import lombok.extern.slf4j.Slf4j;
+
 import com.hp.hpl.jena.query.QuerySolution;
 import com.unboundid.ldap.sdk.SearchResultEntry;
-
-import reciter.connect.beans.vivo.EducationBean;
-import reciter.connect.beans.vivo.OfaBean;
-import reciter.connect.beans.vivo.RoleBean;
 
 
 /**
@@ -37,22 +36,20 @@ import reciter.connect.beans.vivo.RoleBean;
  * graph. (for now).
  * </p>
  */
+@Slf4j
+@Component
 public class AppointmentsFetchFromED {
 
 	private List<String> people = new ArrayList<String>();
 	private ArrayList<OfaBean> ofaData = new ArrayList<OfaBean>();
-	
-	private static Logger log = LoggerFactory.getLogger(AppointmentsFetchFromED.class);
-	
-	private static String propertyFilePath = null;
-	
-	
+
 	SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 	
 	/**
 	 * LDAP connection factory for all enterprise directory related connections
 	 */
-	LDAPConnectionFactory lcf = LDAPConnectionFactory.getInstance(propertyFilePath);
+	@Autowired
+	private LDAPConnectionFactory lcf;
 	
 	private Connection con = null;
 	
@@ -60,7 +57,8 @@ public class AppointmentsFetchFromED {
 	/**
 	 * Jena connection factory object for all the apache jena sdb related connections
 	 */
-	JenaConnectionFactory jcf = JenaConnectionFactory.getInstance(propertyFilePath);
+	@Autowired
+	private JenaConnectionFactory jcf;
 	
 	/**
 	 * The default namespace for VIVO
@@ -70,107 +68,69 @@ public class AppointmentsFetchFromED {
 	/**
 	 * Mssql connection factory object for all the mysql related connections
 	 */
-	MssqlConnectionFactory mcf = MssqlConnectionFactory.getInstance(propertyFilePath);
+	@Autowired
+	private MssqlConnectionFactory mcf;
 	
 	Date now = new Date();
 	private String strDate = sdf.format(now);
 	
 	private String currYear = new SimpleDateFormat("yyyy").format(now);
-	
-	
-	/**
-	 * Main method
-	 * 
-	 * @param args
-	 *            command-line arguments
-	 */
-	public static void main (String args[]) {
-		if (args.length == 0) {
-			log.info("Usage: java fetch.JSONPeopleFetch [properties filename]");
-			log.info("e.g. java fetch.JSONPeopleFetch /usr/share/vivo-ed-people/examples/wcmc_people.properties");
-		} else if (args.length == 1) { // path of the properties file
-			propertyFilePath = args[0];
-			new AppointmentsFetchFromED().init(args[0]);
-		}
-	}
-		
-		
-		/**
-		 * Initializes all the required variables
-		 * @param propertiesFile link to the properties file path
-		 */
-		private void init(String propertiesFile) {
-			if(this.vivoNamespace == null) {
-				log.info("Please provide a namespace in property file");
-			}
-			else {
-				try {
-					execute();
-				} catch(IOException e) {
-					log.error("IOExcetion", e);
-				}
-			}
-
-		}
 		
 		/**
 		 * This is the main execution method of the class
 		 * @throws IOException when connecting to ED
 		 */
-		private void execute() throws IOException {
-			
-			int insertCount = 0;
-			int updateCount = 0;
-			//Initialize connection pool and fill it with connection
-			this.con = this.mcf.getConnectionfromPool();
-			
-			OfaBean ob1 = new OfaBean();
-			
-			EdDataInterface edi = new EdDataInterfaceImpl();
-			this.people = edi.getPeopleInVivo(propertyFilePath, this.jcf); //Get all the faculty in VIVO
-			
-			Iterator<String> it = this.people.iterator();
-			while(it.hasNext()) {
-			OfaBean ob = getRolesFromED(it.next()); //Get all the appointments in ED
-			ArrayList<EducationBean> edu = getEducationAndTraining(ob.getCwid()); //Get all the education and training data from OFA
-			ob.setEdu(edu);
-			this.ofaData.add(ob);
-			}
-			
-			if(this.con!=null) {
-				this.mcf.returnConnectionToPool(this.con);
-				this.mcf.destroyConnectionPool();
-			}
-			
-			this.lcf.destroyConnectionPool();
-			
-			Iterator<OfaBean>  it1 = this.ofaData.iterator();
-			while(it1.hasNext()) {
-				log.info("#########################################################");
-				ob1 = it1.next();
-				if(!checkOfaDataInVivo(ob1)) {
-					log.info("Person: "+ob1.getCwid() + " does not has appointments in VIVO");
-					insertOfaDataInVivo(ob1);
-					
-					insertCount = 	insertCount + 1;
-				}
-				else {
-					log.info("Checking for any updates for "+ob1.getCwid());
-					updateCount = checkForUpdates(ob1, ob1.getCwid());
-					
-				}
-				log.info("#########################################################");
-			}
-
-			
-			log.info("New appointments fetched for " + insertCount + " people");
-			log.info("Appointments updated for " + updateCount + " people");
-			log.info("Appointments fetch completed successfully...");
-			
-			//Destroy jena connection pool
-			if(this.jcf != null)
-				this.jcf.destroyConnectionPool();
+	public void execute() throws IOException {
+		
+		int insertCount = 0;
+		int updateCount = 0;
+		//Initialize connection pool and fill it with connection
+		this.con = this.mcf.getConnectionfromPool("ASMS");
+		
+		OfaBean ob1 = new OfaBean();
+		
+		EdDataInterface edi = new EdDataInterfaceImpl();
+		this.people = edi.getPeopleInVivo(this.jcf); //Get all the faculty in VIVO
+		
+		Iterator<String> it = this.people.iterator();
+		while(it.hasNext()) {
+		OfaBean ob = getRolesFromED(it.next()); //Get all the appointments in ED
+		ArrayList<EducationBean> edu = getEducationAndTraining(ob.getCwid()); //Get all the education and training data from OFA
+		ob.setEdu(edu);
+		this.ofaData.add(ob);
 		}
+		
+		if(this.con!=null) {
+			this.mcf.returnConnectionToPool("ASMS", con);
+		}
+		
+		Iterator<OfaBean>  it1 = this.ofaData.iterator();
+		while(it1.hasNext()) {
+			log.info("#########################################################");
+			ob1 = it1.next();
+			if(!checkOfaDataInVivo(ob1)) {
+				log.info("Person: "+ob1.getCwid() + " does not has appointments in VIVO");
+				insertOfaDataInVivo(ob1);
+				
+				insertCount = 	insertCount + 1;
+			}
+			else {
+				log.info("Checking for any updates for "+ob1.getCwid());
+				updateCount = checkForUpdates(ob1, ob1.getCwid());
+				
+			}
+			log.info("#########################################################");
+		}
+
+		
+		log.info("New appointments fetched for " + insertCount + " people");
+		log.info("Appointments updated for " + updateCount + " people");
+		log.info("Appointments fetch completed successfully...");
+		
+		//Destroy jena connection pool
+		if(this.jcf != null)
+			this.jcf.destroyConnectionPool();
+	}
 		
 		/**
 		 * This function gets all the appointment information from your LDAP based system data
@@ -184,36 +144,34 @@ public class AppointmentsFetchFromED {
 			ob.setCwid(cwid);
 			log.info("Getting list of appointments for cwid " + cwid);
 			log.info("Getting primary Affiliation for cwid " + cwid);	
-			 String filter = "(&(ou=faculty)(objectClass=weillCornellEduSORRecord)(weillCornellEduCWID=" + cwid + "))";
+			String filter = "(&(ou=faculty)(objectClass=weillCornellEduSORRecord)(weillCornellEduCWID=" + cwid + "))";
 				
 				
 				
-			 List<SearchResultEntry> results = this.lcf.searchWithBaseDN(filter,"ou=faculty,ou=sors,dc=weill,dc=cornell,dc=edu");
+			List<SearchResultEntry> results = this.lcf.searchWithBaseDN(filter,"ou=faculty,ou=sors,dc=weill,dc=cornell,dc=edu");
 				
 				String primaryAffiliation = null;
 				String primaryPosition = null;
 				
 				if (results != null) {
-					
-		           
-		            for (SearchResultEntry entry : results) {
-		            	if(entry.getAttributeValue("weillCornellEduPrimaryOrganization") != null) {
-		                  
-		                  if(entry.getAttributeValue("weillCornellEduPrimaryOrganization") != null)
-		                	  primaryAffiliation = entry.getAttributeValue("weillCornellEduPrimaryOrganization");
-		                  
-		                  if(entry.getAttributeValue("weillCornellEduPrimaryTitle") != null)
-		                	  primaryPosition = entry.getAttributeValue("weillCornellEduPrimaryTitle");
-		                  
-		                  log.info("Primary Position: " + primaryPosition);
-		                     
-		            	}
-		            }
-		            log.info("Number of results found: " + results.size());
-		        }
-		        else {
-		            log.info("No results found");
-		        }
+					for (SearchResultEntry entry : results) {
+						if(entry.getAttributeValue("weillCornellEduPrimaryOrganization") != null) {
+							
+							if(entry.getAttributeValue("weillCornellEduPrimaryOrganization") != null)
+								primaryAffiliation = entry.getAttributeValue("weillCornellEduPrimaryOrganization");
+							
+							if(entry.getAttributeValue("weillCornellEduPrimaryTitle") != null)
+								primaryPosition = entry.getAttributeValue("weillCornellEduPrimaryTitle");
+							
+							log.info("Primary Position: " + primaryPosition);
+								
+						}
+					}
+					log.info("Number of results found: " + results.size());
+				}
+				else {
+					log.info("No results found");
+				}
 			
 			//Takes care of Douglas J. Ballon appointments
 			filter = "(&(ou=faculty)(objectClass=weillCornellEduSORRoleRecord)(weillCornellEduCWID=" + cwid + ")(weillCornellEduEndDate>=19991231050000Z)(!(|(weillCornellEduSORID=10085791)(weillCornellEduSORID=2318)(weillCornellEduSORID=10016608)(weillCornellEduSORID=3001124))))";
@@ -223,63 +181,62 @@ public class AppointmentsFetchFromED {
 			results = this.lcf.searchWithBaseDN(filter,"ou=faculty,ou=sors,dc=weill,dc=cornell,dc=edu");
 			
 			if (results != null) {
-	           
-	            for (SearchResultEntry entry : results) {
-	            	if(entry.getAttributeValue("weillCornellEduCWID") != null) {
-	            		Date endDate = null;
+				for (SearchResultEntry entry : results) {
+					if(entry.getAttributeValue("weillCornellEduCWID") != null) {
+						Date endDate = null;
 						Date currDate = null;
-	                   RoleBean rb = new RoleBean();
-	                   rb.setSorId(entry.getAttributeValue("weillCornellEduSORID"));
-	                   rb.setDepartment(entry.getAttributeValue("weillCornellEduDepartment"));
-	                   rb.setTitleCode(entry.getAttributeValue("title"));
-	                   rb.setStartDate(entry.getAttributeValue("weillCornellEduStartDate").substring(0, 4));
-	                   String ldapEndDate = entry.getAttributeValue("weillCornellEduEndDate").substring(0, 4) + "-" + entry.getAttributeValue("weillCornellEduEndDate").substring(4, 6) + "-" + entry.getAttributeValue("weillCornellEduEndDate").substring(6, 8);
-	                   try {
-	                	   endDate = this.sdf.parse(ldapEndDate);
-	                	   currDate = this.sdf.parse(this.strDate);
-	                   } catch(ParseException e) {
-	                	   log.error("ParseException", e);
-	                   }
-	                   
-	                   if(rb.getTitleCode().contains("(Interim)")) {
-	                	   rb.setInterimAppointment(true);
-	                   }
-	                   
-	                   if(entry.getAttributeValue("weillCornellEduStatus").equalsIgnoreCase("faculty:active") || entry.getAttributeValue("weillCornellEduStatus").equalsIgnoreCase("academic:active")) {
-	                	   rb.setActiveAppointment(true);
-	                   }
-	                   
-	                   if(endDate != null && endDate.compareTo(currDate) >= 0)
-	                	   rb.setEndDate("CURRENT");//This means the appointment is current and does not have an end date
-	                   else
-	                	   rb.setEndDate(entry.getAttributeValue("weillCornellEduEndDate").substring(0, 4));
-	                   
-	                   
-	                   if(entry.getAttributeValue("weillCornellEduDepartment") != null) {
-	                	   rb.setDeptCode(getDepartmentCode(entry.getAttributeValue("weillCornellEduDepartment")));
-	                   }
-	                   //Determining Primary Position
-	                   if(primaryPosition == null) {
-	                	   if(entry.getAttributeValue("weillCornellEduPrimaryEntry").trim().equals("TRUE"))
-	                		   rb.setPrimaryAppointment(true);
-	                	   else 
-		                	   rb.setPrimaryAppointment(false);
-	                   }
-	                   else {
-		                   if(entry.getAttributeValue("title").trim().equals(primaryPosition.trim())) {
-		                	   rb.setPrimaryAppointment(true);
-		                   }
-		                   else 
-		                	   rb.setPrimaryAppointment(false);
-	                   }
-	                   
-	                   roles.add(rb); 
-	            	}
-	            }
-	        }
-	        else {
-	            log.info("No results found");
-	        }
+						RoleBean rb = new RoleBean();
+						rb.setSorId(entry.getAttributeValue("weillCornellEduSORID"));
+						rb.setDepartment(entry.getAttributeValue("weillCornellEduDepartment"));
+						rb.setTitleCode(entry.getAttributeValue("title"));
+						rb.setStartDate(entry.getAttributeValue("weillCornellEduStartDate").substring(0, 4));
+						String ldapEndDate = entry.getAttributeValue("weillCornellEduEndDate").substring(0, 4) + "-" + entry.getAttributeValue("weillCornellEduEndDate").substring(4, 6) + "-" + entry.getAttributeValue("weillCornellEduEndDate").substring(6, 8);
+						try {
+							endDate = this.sdf.parse(ldapEndDate);
+							currDate = this.sdf.parse(this.strDate);
+						} catch(ParseException e) {
+							log.error("ParseException", e);
+						}
+						
+						if(rb.getTitleCode().contains("(Interim)")) {
+							rb.setInterimAppointment(true);
+						}
+						
+						if(entry.getAttributeValue("weillCornellEduStatus").equalsIgnoreCase("faculty:active") || entry.getAttributeValue("weillCornellEduStatus").equalsIgnoreCase("academic:active")) {
+							rb.setActiveAppointment(true);
+						}
+						
+						if(endDate != null && endDate.compareTo(currDate) >= 0)
+							rb.setEndDate("CURRENT");//This means the appointment is current and does not have an end date
+						else
+							rb.setEndDate(entry.getAttributeValue("weillCornellEduEndDate").substring(0, 4));
+						
+						
+						if(entry.getAttributeValue("weillCornellEduDepartment") != null) {
+							rb.setDeptCode(getDepartmentCode(entry.getAttributeValue("weillCornellEduDepartment")));
+						}
+						//Determining Primary Position
+						if(primaryPosition == null) {
+							if(entry.getAttributeValue("weillCornellEduPrimaryEntry").trim().equals("TRUE"))
+								rb.setPrimaryAppointment(true);
+							else 
+								rb.setPrimaryAppointment(false);
+						}
+						else {
+							if(entry.getAttributeValue("title").trim().equals(primaryPosition.trim())) {
+								rb.setPrimaryAppointment(true);
+							}
+							else 
+								rb.setPrimaryAppointment(false);
+						}
+						
+						roles.add(rb); 
+					}
+				}
+			}
+			else {
+				log.info("No results found");
+			}
 			
 			ArrayList<RoleBean> modifiedRoles = checkForTenureTrack(roles);
 			
@@ -334,10 +291,20 @@ public class AppointmentsFetchFromED {
 						if(Integer.parseInt(roles.get(j).getStartDate()) > Integer.parseInt(roles.get(index).getStartDate())){
 							roles.get(j).setStartDate(roles.get(index).getStartDate());
 							roles.remove(index);
-						}
-						else {
+						} else if(Integer.parseInt(roles.get(j).getStartDate()) == Integer.parseInt(roles.get(index).getStartDate())) {
+							if(roles.get(j).getEndDate() != null && roles.get(j).getEndDate().equals("CURRENT")) {
+								roles.remove(index);
+								break;
+							}
+							if(roles.get(index).getEndDate() != null && roles.get(index).getEndDate().equals("CURRENT")) {
+								roles.remove(j);
+								break;
+							}
+							
+						} else {
 							roles.get(index).setStartDate(roles.get(j).getStartDate());
 							roles.remove(j);
+							break;
 						}
 						
 						
@@ -674,14 +641,10 @@ public class AppointmentsFetchFromED {
 				if(vivoJena != null)
 					this.jcf.returnConnectionToPool(vivoJena, "wcmcOfa");
 			} catch(IOException e) {
-				// TODO Auto-generated catch block
 				log.error("Exception in connecting to Jena" ,e);
 			}
 			
 			insertInferenceTriples(ob);
-				  
-				  
-				  
 		}
 		
 		/**
@@ -995,7 +958,6 @@ public class AppointmentsFetchFromED {
 							runSparqlUpdateTemplate(updateQuery.toString(), vivoJena);
 							
 						} catch(IOException e) {
-							// TODO Auto-generated catch block
 							log.error("IOException" ,e);
 						}
 						
@@ -1472,20 +1434,18 @@ public class AppointmentsFetchFromED {
 			
 		
 		}
-		
-	    
-	    /**
+		/**
 	     * This function generates a hashcode for a department name(Not used in this class)
 	     * @param dept department name
 	     * @return hashcode for the department
 	     */
-	    public int keyHash(String dept) {
-	    	int hash = 7;
-	    	for (int i = 0; i < dept.length(); i++) {
-	    	    hash = hash*31 + dept.charAt(i);
-	    	}
-	    	hash = hash & Integer.MAX_VALUE;
-	    	return hash;
-	    }
+		public int keyHash(String dept) {
+			int hash = 7;
+			for (int i = 0; i < dept.length(); i++) {
+				hash = hash*31 + dept.charAt(i);
+			}
+			hash = hash & Integer.MAX_VALUE;
+			return hash;
+		}
 	
 }

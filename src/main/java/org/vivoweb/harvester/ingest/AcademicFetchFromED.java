@@ -1,6 +1,5 @@
 package org.vivoweb.harvester.ingest;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -9,19 +8,19 @@ import java.util.Date;
 import java.util.Iterator;
 
 import java.util.List;
-import java.util.Properties;
 import org.apache.commons.lang.StringEscapeUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.vivoweb.harvester.connectionfactory.JenaConnectionFactory;
-import org.vivoweb.harvester.connectionfactory.LDAPConnectionFactory;
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
+
+import lombok.extern.slf4j.Slf4j;
+
 import com.hp.hpl.jena.query.QuerySolution;
-import com.unboundid.ldap.sdk.LDAPConnection;
 import com.unboundid.ldap.sdk.SearchResultEntry;
 
 import reciter.connect.beans.vivo.PeopleBean;
+import reciter.connect.database.ldap.LDAPConnectionFactory;
+import reciter.connect.database.mysql.jena.JenaConnectionFactory;
 
 /**
  * @author szd2013
@@ -29,6 +28,7 @@ import reciter.connect.beans.vivo.PeopleBean;
  * Note - The release code in Enterprise Directory has to be public for faculty in order for the profile to be created in VIVO.
  * Future Scope - To include graduate students profile in VIVO.
  */
+@Slf4j
 @Component
 public class AcademicFetchFromED {
 	
@@ -44,21 +44,16 @@ public class AcademicFetchFromED {
 	/**
 	 * Jena connection factory object for all the apache jena sdb related connections
 	 */
-	JenaConnectionFactory jcf = JenaConnectionFactory.getInstance(propertyFilePath);
+	@Autowired
+	private JenaConnectionFactory jcf;
+	
+	@Autowired
+	private LDAPConnectionFactory lcf;
 	
 	/**
 	 * The default namespace for VIVO
 	 */
 	private String vivoNamespace = JenaConnectionFactory.nameSpace;
-	
-
-	private static Logger log = LoggerFactory.getLogger(AcademicFetchFromED.class);
-	
-	/**
-	 * The LDAP connection gets saved in this variable
-	 */
-	private LDAPConnection conn = null;
-	
 	
 	/**
 	 * Main method
@@ -68,180 +63,129 @@ public class AcademicFetchFromED {
 	 * @throws IOException
 	 * @throws FileNotFoundException
 	 */
-	public static void main (String args[]) {
-		if (args.length == 0) {
-			log.info("Usage: java fetch.JSONPeopleFetch [properties filename]");
-			log.info("e.g. java fetch.JSONPeopleFetch /usr/share/vivo-ed-people/examples/wcmc_people.properties");
-		} else if (args.length == 1) { // path of the properties file
-			propertyFilePath = args[0];
-			
-			new AcademicFetchFromED().init(args[0]);
-		}
-	}
 		
-		
-		/**
-		 * Initializes all the required variables 
-		 * @param propertiesFile The location of property file
-		 */
-		private void init(String propertiesFile) {
-			
-			if(this.vivoNamespace == null) {
-				log.info("Please provide a namespace in property file");
-			}
-			else {
-				try {
-					execute();
-				} catch(IOException e) {
-					log.error("Error in Executing people import" , e);
-				}
-			}
-
-		}
 		
 		/**
 		 * This is the main execution method of the class
 		 */
-		private void execute() throws IOException {
-			
-			
-			getActivePeopleFromED();
-			
-			int count = 0;
-			
-			
-			Iterator<PeopleBean>  it = this.people.iterator();
-			while(it.hasNext()) {
-				PeopleBean pb = it.next();
-				log.info("################################ " + pb.getCwid() + " - " + pb.getDisplayName() + " - Insert/Update Operation #####################");
-				if(!checkPeopleInVivo(pb)) {
-					log.info("Person: "+pb.getCwid() + " does not exist in VIVO");
-					insertPeopleInVivo(pb);
-					count = count + 1;
-				}
-				else {
-					log.info("Person: "+pb.getCwid() + " already exist in VIVO");
-					checkForUpdates(pb);
-					syncPersonTypes(pb);
-				}
-				log.info("################################ End of " + pb.getCwid() + " - " + pb.getDisplayName() + " -  Insert/Update Operation ###################");
+	public void execute() throws IOException {
+
+		getActivePeopleFromED();
+		
+		int count = 0;
+		
+		
+		Iterator<PeopleBean>  it = this.people.iterator();
+		while(it.hasNext()) {
+			PeopleBean pb = it.next();
+			log.info("################################ " + pb.getCwid() + " - " + pb.getDisplayName() + " - Insert/Update Operation #####################");
+			if(!checkPeopleInVivo(pb)) {
+				log.info("Person: "+pb.getCwid() + " does not exist in VIVO");
+				insertPeopleInVivo(pb);
+				count = count + 1;
 			}
-			
-			log.info("Number of new people inserted in VIVO: " + count);
-			
-			log.info("Number of people updated in VIVO: " + this.updateCount);
-			
-			
-			log.info("People fetch completed successfully...");
-			
-			//Destroy jena connection pool
-			if(this.jcf != null)
-				this.jcf.destroyConnectionPool();
+			else {
+				log.info("Person: "+pb.getCwid() + " already exist in VIVO");
+				checkForUpdates(pb);
+				syncPersonTypes(pb);
+			}
+			log.info("################################ End of " + pb.getCwid() + " - " + pb.getDisplayName() + " -  Insert/Update Operation ###################");
 		}
+		
+		log.info("Number of new people inserted in VIVO: " + count);
+		
+		log.info("Number of people updated in VIVO: " + this.updateCount);
+		
+		
+		log.info("People fetch completed successfully...");
+	}
 		
 		
 		/**
 		 * This function gets active people from Enterprise Directory having personTypeCode as academic
 		 */
 		private void getActivePeopleFromED() {
-			
-			LDAPConnectionFactory lcf = LDAPConnectionFactory.getInstance(propertyFilePath);
+
 			int noCwidCount = 0;
 			String filter = "(&(objectClass=eduPerson)(weillCornellEduPersonTypeCode=academic))";
 			
 			List<SearchResultEntry> results = lcf.searchWithBaseDN(filter,"ou=people,dc=weill,dc=cornell,dc=edu");
 			
-			
-			
-			
 			if (results != null) {
-	           
-	            for (SearchResultEntry entry : results) {
-	            	if(entry.getAttributeValue("weillCornellEduCWID") == null) {
-	            		noCwidCount = noCwidCount + 1;
-	            		//log.info(entry.getAttributeValue("uid"));
-	            		
-	            	}
-	            	if(entry.getAttributeValue("weillCornellEduCWID") != null) {
-	                   PeopleBean pb = new PeopleBean();
-	                   pb.setCwid(entry.getAttributeValue("weillCornellEduCWID"));
-
-	                   pb.setDisplayName(StringEscapeUtils.escapeJava(entry.getAttributeValue("displayName")));
-	                   
-	                   pb.setGivenName(StringEscapeUtils.escapeJava(entry.getAttributeValue("givenName")));
-	                   
-	                   if(entry.getAttributeValue("mail")!=null)
-	                	   pb.setMail(entry.getAttributeValue("mail"));
-	                   else
-	                	   pb.setMail("");
-	                   
-	                   if(entry.getAttributeValue("weillCornellEduWorkingTitle") != null)
-	                	   pb.setPrimaryTitle(entry.getAttributeValue("weillCornellEduWorkingTitle"));
-	                   else if(entry.getAttributeValue("weillCornellEduPrimaryTitle")!=null)
-	                	   pb.setPrimaryTitle(entry.getAttributeValue("weillCornellEduPrimaryTitle"));
-	                   else
-	                	   pb.setPrimaryTitle("");
-	                   
-	                   if(entry.getAttributeValue("weillCornellEduStatus")!=null)
-	                	   pb.setStatus(entry.getAttributeValue("weillCornellEduStatus"));
-	                   else
-	                	   pb.setStatus("");
-	                   
-	                   if(entry.getAttributeValue("telephoneNumber")!= null)
-	                	   pb.setTelephoneNumber(entry.getAttributeValue("telephoneNumber"));
-	                   else
-	                	   pb.setTelephoneNumber("");
-	                   
-	                   if(entry.getAttributeValue("weillCornellEduMiddleName")!=null)
-	                	   pb.setMiddleName(entry.getAttributeValue("weillCornellEduMiddleName"));
-	                   else
-	                	   pb.setMiddleName("");
-	                   
-	                   if(entry.getAttributeValue("sn")!=null)
-	                	   pb.setSn(entry.getAttributeValue("sn"));
-	                   else
-	                	   pb.setSn("");
-	                   
-	                   if(entry.getAttributeValue("labeledURI;pops") != null)
-	                	   pb.setPopsProfile(entry.getAttributeValue("labeledURI;pops"));
-	                   else
-	                	   pb.setPopsProfile("");
-	                   
-	                   String personType[] = new String[entry.getAttributeValues("weillCornellEduPersonTypeCode").length];
-	                   personType = entry.getAttributeValues("weillCornellEduPersonTypeCode");
-	                   String ptype = assignVivoPersonType(personType);
-	                   pb.setPersonCode(ptype);
-	                  
-	                   List<String> ptypes = Arrays.asList(personType);
-	                   
-	                   ArrayList<String> nsTypes = determineNsType(ptypes);
-	                   
-	                   pb.setNsTypes(nsTypes);
-	                   log.info(pb.toString());
-	                   for(String s: nsTypes) {
-	                	   log.info(s);
-	                   }
-	                   log.info("------------------------------------------------------------------------------------------------------------");
-	                   this.people.add(pb);
-	                   
-	                  
-	            		
-	            		
-	                   
-	            	}
-
-	            }
-			
-	            log.info("Number of people found: " + this.people.size());
-	            log.info("No of Records with no CWID: " + noCwidCount);
-	        }
-	        else {
-	            log.info("No results found");
-	        }
-			
-			lcf.destroyConnectionPool();
-				
-				
+				for (SearchResultEntry entry : results) {
+					if(entry.getAttributeValue("weillCornellEduCWID") == null) {
+						noCwidCount = noCwidCount + 1;
+						//log.info(entry.getAttributeValue("uid"));
+						
+					}
+					if(entry.getAttributeValue("weillCornellEduCWID") != null) {
+						PeopleBean pb = new PeopleBean();
+						pb.setCwid(entry.getAttributeValue("weillCornellEduCWID"));
+						pb.setDisplayName(StringEscapeUtils.escapeJava(entry.getAttributeValue("displayName")));
+						
+						pb.setGivenName(StringEscapeUtils.escapeJava(entry.getAttributeValue("givenName")));
+						
+						if(entry.getAttributeValue("mail")!=null)
+							pb.setMail(entry.getAttributeValue("mail"));
+						else
+							pb.setMail("");
+						
+						if(entry.getAttributeValue("weillCornellEduWorkingTitle") != null)
+							pb.setPrimaryTitle(entry.getAttributeValue("weillCornellEduWorkingTitle"));
+						else if(entry.getAttributeValue("weillCornellEduPrimaryTitle")!=null)
+							pb.setPrimaryTitle(entry.getAttributeValue("weillCornellEduPrimaryTitle"));
+						else
+							pb.setPrimaryTitle("");
+						
+						if(entry.getAttributeValue("weillCornellEduStatus")!=null)
+							pb.setStatus(entry.getAttributeValue("weillCornellEduStatus"));
+						else
+							pb.setStatus("");
+						
+						if(entry.getAttributeValue("telephoneNumber")!= null)
+							pb.setTelephoneNumber(entry.getAttributeValue("telephoneNumber"));
+						else
+							pb.setTelephoneNumber("");
+						
+						if(entry.getAttributeValue("weillCornellEduMiddleName")!=null)
+							pb.setMiddleName(entry.getAttributeValue("weillCornellEduMiddleName"));
+						else
+							pb.setMiddleName("");
+						
+						if(entry.getAttributeValue("sn")!=null)
+							pb.setSn(entry.getAttributeValue("sn"));
+						else
+							pb.setSn("");
+						
+						if(entry.getAttributeValue("labeledURI;pops") != null)
+							pb.setPopsProfile(entry.getAttributeValue("labeledURI;pops"));
+						else
+							pb.setPopsProfile("");
+						
+						String personType[] = new String[entry.getAttributeValues("weillCornellEduPersonTypeCode").length];
+						personType = entry.getAttributeValues("weillCornellEduPersonTypeCode");
+						String ptype = assignVivoPersonType(personType);
+						pb.setPersonCode(ptype);
+						
+						List<String> ptypes = Arrays.asList(personType);
+						
+						ArrayList<String> nsTypes = determineNsType(ptypes);
+						
+						pb.setNsTypes(nsTypes);
+						log.info(pb.toString());
+						for(String s: nsTypes) {
+							log.info(s);
+						}
+						log.info("------------------------------------------------------------------------------------------------------------");
+						this.people.add(pb);
+				}
+			}
+				log.info("Number of people found: " + this.people.size());
+				log.info("No of Records with no CWID: " + noCwidCount);
+			}
+			else {
+				log.info("No results found");
+			}		
 		}
 		
 		/**
@@ -347,15 +291,10 @@ public class AcademicFetchFromED {
 				if(vivoJena!= null)
 					this.jcf.returnConnectionToPool(vivoJena, "wcmcPeople");
 			} catch(IOException e) {
-				// TODO Auto-generated catch block
 				log.error("Error connecting to Jena database", e);
 			}
 			
 			insertInferenceTriples(pb);
-				  
-				  
-				  
-				  
 		}
 		
 		/**
@@ -544,13 +483,13 @@ public class AcademicFetchFromED {
 		private boolean checkPeopleInVivo(PeopleBean pb) throws IOException {
 			int count = 0;
 			String sparqlQuery = "PREFIX rdf:      <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
-								 "PREFIX foaf:     <http://xmlns.com/foaf/0.1/> \n" +
-								 "SELECT  (count(rdf:type) as ?c) \n" +
-								 "FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n" +
-								 "WHERE \n" +
-								 "{ \n" +
-								 "<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> rdf:type foaf:Person . \n" +
-								 "}";
+									"PREFIX foaf:     <http://xmlns.com/foaf/0.1/> \n" +
+									"SELECT  (count(rdf:type) as ?c) \n" +
+									"FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n" +
+									"WHERE \n" +
+									"{ \n" +
+									"<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> rdf:type foaf:Person . \n" +
+									"}";
 			
 			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
 			
@@ -583,25 +522,25 @@ public class AcademicFetchFromED {
 			String phone = "";
 			String middleName = "";
 			String sparqlQuery = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
-				 "PREFIX foaf: <http://xmlns.com/foaf/0.1/> \n" +
-				 "PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n" +
-				 "PREFIX core: <http://vivoweb.org/ontology/core#> \n" +
-				 "PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n" +
-				 "PREFIX vcard: <http://www.w3.org/2006/vcard/ns#> \n" +
-				 "SELECT ?label ?type ?phone ?title ?email ?firstName ?lastName ?middleName ?popsUrl\n" +
-				 "FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n" +
-				 "WHERE \n" +
-				 "{ \n" +
-				 "<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:personLabel ?label .\n" +
-				 "<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> vitro:mostSpecificType ?type .\n" +
-				 "<" + this.vivoNamespace + "hasTitle-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#title> ?title . \n" +
-				 "<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#givenName> ?firstName . \n" +
-				 "<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#familyName> ?lastName . \n" +
-				 "OPTIONAL { <" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:officePhone ?phone . }\n" +
-				 "OPTIONAL { <" + this.vivoNamespace + "hasEmail-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#email> ?email . }\n" +
-				 "OPTIONAL { <" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> core:middleName ?middleName . }\n" +
-				 "OPTIONAL { <" + this.vivoNamespace + "popsUrl-" + pb.getCwid().trim() + "> vcard:url ?popsUrl } \n" +
-				 "}";
+					"PREFIX foaf: <http://xmlns.com/foaf/0.1/> \n" +
+					"PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n" +
+					"PREFIX core: <http://vivoweb.org/ontology/core#> \n" +
+					"PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n" +
+					"PREFIX vcard: <http://www.w3.org/2006/vcard/ns#> \n" +
+					"SELECT ?label ?type ?phone ?title ?email ?firstName ?lastName ?middleName ?popsUrl\n" +
+					"FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n" +
+					"WHERE \n" +
+					"{ \n" +
+					"<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:personLabel ?label .\n" +
+					"<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> vitro:mostSpecificType ?type .\n" +
+					"<" + this.vivoNamespace + "hasTitle-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#title> ?title . \n" +
+					"<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#givenName> ?firstName . \n" +
+					"<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#familyName> ?lastName . \n" +
+					"OPTIONAL { <" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:officePhone ?phone . }\n" +
+					"OPTIONAL { <" + this.vivoNamespace + "hasEmail-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#email> ?email . }\n" +
+					"OPTIONAL { <" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> core:middleName ?middleName . }\n" +
+					"OPTIONAL { <" + this.vivoNamespace + "popsUrl-" + pb.getCwid().trim() + "> vcard:url ?popsUrl } \n" +
+					"}";
 			
 			log.info(sparqlQuery);
 			SDBJenaConnect vivoJena;
@@ -900,22 +839,15 @@ public class AcademicFetchFromED {
 			}
 			if(vivoJena!= null)
 				this.jcf.returnConnectionToPool(vivoJena, "wcmcPeople");
-		}
-		
-		
-	    /**
+		}/**
 		 * Template to fit in different JenaConnect queries.
 		 * @param sparqlQuery contains the query
 		 * @return ResultSet containing all the results
 		 * @throws IOException default exception thrown
 		 */
 		private com.hp.hpl.jena.query.ResultSet runSparqlTemplate(String sparqlQuery, SDBJenaConnect vivoJena) throws IOException {
-			
-			
 			com.hp.hpl.jena.query.ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery);		
 			return rs;
-			
-		
 		}
 		
 		/**
@@ -925,12 +857,7 @@ public class AcademicFetchFromED {
 		 * @throws IOException default exception thrown
 		 */
 		private void runSparqlUpdateTemplate(String sparqlQuery, SDBJenaConnect vivoJena) throws IOException {
-			
 			vivoJena.executeUpdateQuery(sparqlQuery, true);
-			//log.info("Inserted success");
-			
-			
-		
 		}
 		
 

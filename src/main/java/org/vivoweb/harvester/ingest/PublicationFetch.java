@@ -32,8 +32,7 @@ import java.util.Properties;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.vivoweb.harvester.connectionfactory.RDBMSConnectionFactory;
-import org.vivoweb.harvester.connectionfactory.JenaConnectionFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.vivoweb.harvester.publication.workflow.PublicationAuthorshipMaintenance;
 import org.vivoweb.harvester.publication.workflow.ScopusInProcessUpdate;
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
@@ -44,6 +43,8 @@ import com.hp.hpl.jena.query.QuerySolution;
 import com.hp.hpl.jena.query.ResultSet;
 
 import reciter.connect.beans.vivo.*;
+import reciter.connect.database.mysql.MysqlConnectionFactory;
+import reciter.connect.database.mysql.jena.JenaConnectionFactory;
 
 /**
  * @author szd2013
@@ -51,12 +52,6 @@ import reciter.connect.beans.vivo.*;
  * It will check for updates for citation count, publication type. </i></b></p>
  */
 public class PublicationFetch {
-	
-	/**
-	 * <i>This is the file path of the property file</i>
-	 */
-	public static String propertyFilePath = null;
-	
 	/**
 	 * <i>This is the global connection variable for all connections to PubAdmin</i>
 	 */
@@ -65,17 +60,14 @@ public class PublicationFetch {
 	/**
 	 * <i> Connection factory object to get connections to PubAdmin </i>
 	 */
-	RDBMSConnectionFactory mcf = RDBMSConnectionFactory.getInstance(propertyFilePath);
-	
-	/**
-	 * <i>This is a connection factory object to get ldap connection to Enterprise Directory</i>
-	 */
-	//LDAPConnectionFactory lcf = LDAPConnectionFactory.getInstance(propertyFilePath);
+	@Autowired
+	private MysqlConnectionFactory mcf;
 	
 	/**
 	 * <i>Jena connection factory object for all the apache jena sdb related connections</i>
 	 */
-	JenaConnectionFactory jcf = JenaConnectionFactory.getInstance(propertyFilePath);
+	@Autowired
+	private JenaConnectionFactory jcf;
 	
 	/**
 	 * The default namespace for VIVO
@@ -167,6 +159,9 @@ public class PublicationFetch {
 	private Date currentDate = new Date();
 	
 	private Calendar cal = Calendar.getInstance();
+
+	@Autowired
+	private EdDataInterface edi;
 	
 	
 	/**
@@ -175,7 +170,7 @@ public class PublicationFetch {
 	 * @param args
 	 *            command-line arguments
 	 */
-	public static void main (String args[]) {
+	/* public static void main (String args[]) {
 		
 		if (args.length == 0) {
 			log.info("Usage: java fetch.JSONPeopleFetch [properties filename]");
@@ -199,19 +194,18 @@ public class PublicationFetch {
 			
 			new PublicationFetch().execute();
 		}
-	}
+	} */
 	
 	/**
 	 * This is the main execution method of the class
 	 */
-	private void execute() {
+	public void execute() {
 		if(this.vivoNamespace == null) {
 			log.info("Please provide a namespace in property file");
 		}
 		else {
-			EdDataInterface edi = new EdDataInterfaceImpl();
 			this.con = this.mcf.getConnectionfromPool();
-			this.activePeople = edi.getPeopleInVivo(propertyFilePath, this.jcf);
+			this.activePeople = edi.getPeopleInVivo(this.jcf);
 			PublicationBean pb = new PublicationBean();
 			Set<AuthorBean> authors = new HashSet<AuthorBean>();
 			Iterator<String> it = this.activePeople.iterator();
@@ -233,11 +227,7 @@ public class PublicationFetch {
 			//Destory Mysql connection pool
 			if(this.con!=null) {
 				this.mcf.returnConnectionToPool(this.con);
-				this.mcf.destroyConnectionPool();
 			}
-			//Destroy jena connection pool
-			if(this.jcf != null)
-				this.jcf.destroyConnectionPool();
 		}
 	}
 	
