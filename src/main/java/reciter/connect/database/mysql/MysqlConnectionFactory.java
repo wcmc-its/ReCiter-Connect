@@ -36,16 +36,17 @@ import org.springframework.context.annotation.Scope;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * @author szd2013
  * This class manages connection to all oracle datasources
  *
  */
+@Slf4j
 @Component
 @Scope(value = ConfigurableBeanFactory.SCOPE_SINGLETON)
 public class MysqlConnectionFactory {
-
-	private static final Logger slf4jLogger = LoggerFactory.getLogger(MysqlConnectionFactory.class);
 
 	private String username;
 	private String password;
@@ -78,10 +79,10 @@ public class MysqlConnectionFactory {
 	 */
 	private void initializeConnectionPool() {
 		while(!checkIfConnectionPoolIsFull()) {
-			slf4jLogger.info("MySQLConnection pool is not full. Proceeding with adding new connection");
+			log.info("MySQLConnection pool is not full. Proceeding with adding new connection");
 			this.connectionPool.addElement(createNewConnectionForPool());
 		}
-		slf4jLogger.info("MySQLConnection pool is full");
+		log.info("MySQLConnection pool is full");
 	}
 	
 	/**
@@ -120,11 +121,11 @@ public class MysqlConnectionFactory {
 			con.close();
 			}
 			catch(SQLException sqle){
-				slf4jLogger.error("SQLException", sqle);
+				log.error("SQLException", sqle);
 			}
 		}
 		this.connectionPool.removeAllElements();
-		slf4jLogger.info("All Mysql connections were destroyed");
+		log.info("All Mysql connections were destroyed");
 	} 
 	
 	public Connection createNewConnectionForPool()
@@ -138,8 +139,7 @@ public class MysqlConnectionFactory {
 						con = DriverManager.getConnection(this.url, this.username, this.password);
 					} 
 					catch(SQLException e) {
-						// TODO Auto-generated catch block
-						slf4jLogger.error("SQLException: " , e);
+						log.error("SQLException: " , e);
 					} 
 		}
 		return con;

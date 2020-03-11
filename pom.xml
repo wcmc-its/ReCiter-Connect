@@ -203,23 +203,6 @@
 			</exclusions>
 		</dependency>
 		<dependency>
-			<groupId>ch.qos.logback</groupId>
-			<artifactId>logback-classic</artifactId>
-			<version>0.9.27</version>
-			<type>jar</type>
-			<scope>compile</scope>
-			<exclusions>
-				<exclusion>
-					<artifactId>slf4j-log4j12</artifactId>
-					<groupId>org.slf4j</groupId>
-				</exclusion>
-				<exclusion>
-					<artifactId>slf4j-api</artifactId>
-					<groupId>org.slf4j</groupId>
-				</exclusion>
-			</exclusions>
-		</dependency>
-		<dependency>
 			<groupId>org.apache.axis2</groupId>
 			<artifactId>axis2</artifactId>
 			<version>1.5.4</version>
@@ -228,7 +211,7 @@
 		<dependency>
 			<groupId>mysql</groupId>
 			<artifactId>mysql-connector-java</artifactId>
-<!-- 			<version>5.1.15</version> -->
+			<version>5.1.15</version>
 			<type>jar</type>
 			<scope>compile</scope>
 		</dependency>
@@ -249,14 +232,13 @@
 		<dependency>
 			<groupId>com.google.code.gson</groupId>
 			<artifactId>gson</artifactId>
-			<version>2.3.1</version>
 		</dependency>
 		
 		<dependency>
-    		<groupId>com.unboundid</groupId>
-    		<artifactId>unboundid-ldapsdk</artifactId>
-    		<version>3.2.0</version>
-    		<type>jar</type>
+			<groupId>com.unboundid</groupId>
+			<artifactId>unboundid-ldapsdk</artifactId>
+			<version>3.2.0</version>
+			<type>jar</type>
 			<scope>compile</scope>
 		</dependency>
 		<dependency>
