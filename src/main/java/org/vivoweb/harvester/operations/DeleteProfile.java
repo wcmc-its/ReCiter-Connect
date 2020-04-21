@@ -23,7 +23,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.vivoweb.harvester.ingest.EdDataInterface;
 import org.vivoweb.harvester.ingest.EdDataInterfaceImpl;
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
-import com.hp.hpl.jena.query.*;
+
+import org.apache.jena.query.QuerySolution;
+import org.apache.jena.query.ResultSet;
+
 import com.unboundid.ldap.sdk.SearchResultEntry;
 
 import reciter.connect.beans.vivo.delete.profile.PublicationBean;

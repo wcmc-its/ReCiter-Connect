@@ -31,6 +31,7 @@ import reciter.connect.database.ldap.LDAPConnectionFactory;
 import reciter.connect.database.mssql.MssqlConnectionFactory;
 import reciter.connect.database.mysql.MysqlConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
+import reciter.connect.vivo.sdb.query.SDBQueryInterface;
 
 @SpringBootApplication
 @PropertySource("classpath:application.properties")
@@ -77,6 +78,9 @@ public class Application {
 		MysqlConnectionFactory mysqlConnectionFactory = context.getBean(MysqlConnectionFactory.class);
         MssqlConnectionFactory mssqlConnectionFactory = context.getBean(MssqlConnectionFactory.class);
         JenaConnectionFactory jenaConnectionFactory = context.getBean(JenaConnectionFactory.class);
+        SDBQueryInterface sdbQueryInterface = context.getBean(SDBQueryInterface.class);
+
+        sdbQueryInterface.query();
 
 
         ReCiterClient reCiterClient = context.getBean(ReCiterClient.class);

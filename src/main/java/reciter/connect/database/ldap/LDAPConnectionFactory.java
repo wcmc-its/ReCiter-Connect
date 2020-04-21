@@ -73,7 +73,7 @@ public class LDAPConnectionFactory {
         this.ldapBindPassword = env.getProperty("LDAP_BIND_PASSWORD");
         this.ldapHostname = ldapHostname;
         this.ldapPort = ldapPort;
-        initialize();
+        //initialize();
 	}
 
     public LDAPConnection createConnection() {

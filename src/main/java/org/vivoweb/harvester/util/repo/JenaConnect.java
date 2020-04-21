@@ -14,30 +14,37 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.Map;
+
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.vivoweb.harvester.util.InitLog;
-import org.vivoweb.harvester.util.FileAide;
-import org.vivoweb.harvester.util.args.ArgDef;
-import org.vivoweb.harvester.util.args.ArgList;
-import org.vivoweb.harvester.util.args.ArgParser;
-import org.vivoweb.harvester.util.args.UsageException;
-import org.xml.sax.Attributes;
-import org.xml.sax.SAXException;
-import org.xml.sax.helpers.DefaultHandler;
-import com.hp.hpl.jena.graph.GraphEvents;
+
+import com.hp.hpl.jena.sparql.resultset.ResultSetFormat;
+
+import org.apache.jena.graph.GraphEvents;
+import org.apache.jena.query.Dataset;
+import org.apache.jena.query.QueryExecution;
+import org.apache.jena.query.QueryExecutionFactory;
+import org.apache.jena.query.QueryFactory;
+import org.apache.jena.query.ResultSet;
+import org.apache.jena.query.ResultSetFactory;
+import org.apache.jena.query.Syntax;
+import org.apache.jena.rdf.model.Model;
+import org.apache.jena.rdf.model.Property;
+import org.apache.jena.rdf.model.RDFNode;
+import org.apache.jena.rdf.model.RDFWriter;
+import org.apache.jena.rdf.model.Resource;
+import org.apache.jena.shared.Lock;
+import org.apache.jena.update.UpdateAction;
+import org.apache.jena.update.UpdateFactory;
+
+/* import com.hp.hpl.jena.graph.GraphEvents;
 import com.hp.hpl.jena.query.Dataset;
-import com.hp.hpl.jena.query.Query;
 import com.hp.hpl.jena.query.QueryExecution;
 import com.hp.hpl.jena.query.QueryExecutionFactory;
 import com.hp.hpl.jena.query.QueryFactory;
-import com.hp.hpl.jena.query.QueryParseException;
 import com.hp.hpl.jena.query.ResultSet;
 import com.hp.hpl.jena.query.ResultSetFactory;
-import com.hp.hpl.jena.query.ResultSetFormatter;
 import com.hp.hpl.jena.query.Syntax;
 import com.hp.hpl.jena.rdf.model.Model;
 import com.hp.hpl.jena.rdf.model.Property;
@@ -47,7 +54,16 @@ import com.hp.hpl.jena.rdf.model.Resource;
 import com.hp.hpl.jena.shared.Lock;
 import com.hp.hpl.jena.sparql.resultset.ResultSetFormat;
 import com.hp.hpl.jena.update.UpdateAction;
-import com.hp.hpl.jena.update.UpdateFactory;
+import com.hp.hpl.jena.update.UpdateFactory; */
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.vivoweb.harvester.util.FileAide;
+import org.vivoweb.harvester.util.args.ArgDef;
+import org.vivoweb.harvester.util.args.ArgParser;
+import org.xml.sax.Attributes;
+import org.xml.sax.SAXException;
+import org.xml.sax.helpers.DefaultHandler;
 
 /**
  * Connection Helper for Jena Models
@@ -137,16 +153,10 @@ public abstract class JenaConnect {
 		}
 		String type = params.get("type");
 		JenaConnect jc;
-		if(type.equalsIgnoreCase("mem")) {
-			jc = new MemJenaConnect(params.get("modelName"));
-		} else if(type.equalsIgnoreCase("rdb")) {
-			jc = new RDBJenaConnect(params.get("dbUrl"), params.get("dbUser"), params.get("dbPass"), params.get("dbType"), params.get("dbClass"), params.get("modelName"));
-		} else if(type.equalsIgnoreCase("sdb")) {
+		if(type.equalsIgnoreCase("sdb")) {
 			jc = new SDBJenaConnect(params.get("dbUrl"), params.get("dbUser"), params.get("dbPass"), params.get("dbType"), params.get("dbClass"), params.get("dbLayout"), params.get("modelName"));
 		} else if(type.equalsIgnoreCase("tdb")) {
 			jc = new TDBJenaConnect(params.get("dbDir"), params.get("modelName"));
-		} else if(type.equalsIgnoreCase("file")) {
-			jc = new FileJenaConnect(params.get("file"), params.get("rdfLang"));
 		} else {
 			throw new IllegalArgumentException("unknown type: " + type);
 		}
@@ -355,82 +365,7 @@ public abstract class JenaConnect {
 		this.jenaModel.remove(inputJC.getJenaModel());
 	}
 	
-	/**
-	 * Remove RDF from an input stream
-	 * @param in input stream to read rdf from
-	 * @param namespace the base uri to use for imported uris
-	 * @param language the language the rdf is in. Predefined values for lang are "RDF/XML", "N-TRIPLE", "TURTLE" (or
-	 *        "TTL") and "N3". null represents the default language, "RDF/XML". "RDF/XML-ABBREV" is a synonym for
-	 *        "RDF/XML"
-	 */
-	public void removeRdfFromStream(InputStream in, String namespace, String language) {
-		removeRdfFromJC(new MemJenaConnect(in, namespace, language));
-	}
-	
-	/**
-	 * Remove the RDF from a file
-	 * @param fileName the file to read from
-	 * @param namespace the base uri to use for imported uris
-	 * @param language the language the rdf is in. Predefined values for lang are "RDF/XML", "N-TRIPLE", "TURTLE" (or
-	 *        "TTL") and "N3". null represents the default language, "RDF/XML". "RDF/XML-ABBREV" is a synonym for
-	 *        "RDF/XML"
-	 * @throws IOException error connecting
-	 */
-	public void removeRdfFromFile(String fileName, String namespace, String language) throws IOException {
-		removeRdfFromStream(FileAide.getInputStream(fileName), namespace, language);
-	}
-	
-	/**
-	 * Removes all records in a RecordHandler from the model
-	 * @param rh the RecordHandler to pull records from
-	 * @param namespace the base uri to use for imported uris
-	 * @param language the rdf syntax language (RDF/XML, N3, TTL, etc). null = RDF/XML
-	 * @return number of records removed
-	 */
-	public int removeRdfFromRH(RecordHandler rh, String namespace, String language) {
-		int processCount = 0;
-		for(Record r : rh) {
-			log.trace("removing record: " + r.getID());
-			if(namespace != null) {
-				// log.trace("using namespace '"+namespace+"'");
-			}
-			ByteArrayInputStream bais = new ByteArrayInputStream(r.getData().getBytes());
-			getJenaModel().remove(new MemJenaConnect(bais, namespace, language).getJenaModel());
-			try {
-				bais.close();
-			} catch(IOException e) {
-				// ignore
-			}
-			processCount++;
-		}
-		return processCount;
-	}
-	
-	/**
-	 * Adds all records in a RecordHandler to the model
-	 * @param rh the RecordHandler to pull records from
-	 * @param namespace the base uri to use for imported uris
-	 * @param language the rdf syntax language (RDF/XML, N3, TTL, etc).  null = RDF/XML
-	 * @return number of records added
-	 */
-	public int loadRdfFromRH(RecordHandler rh, String namespace, String language) {
-		int processCount = 0;
-		for(Record r : rh) {
-			log.trace("loading record: " + r.getID());
-			if(namespace != null) {
-				// log.trace("using namespace '"+namespace+"'");
-			}
-			ByteArrayInputStream bais = new ByteArrayInputStream(r.getData().getBytes());
-			getJenaModel().read(bais, namespace, language);
-			try {
-				bais.close();
-			} catch(IOException e) {
-				// ignore
-			}
-			processCount++;
-		}
-		return processCount;
-	}
+
 	
 	/**
 	 * Closes the model
@@ -501,52 +436,6 @@ public abstract class JenaConnect {
 	}
 	
 	/**
-	 * Executes a sparql construct query against the JENA model and returns the constructed result model
-	 * @param queryString the query to execute against the model
-	 * @return the executed query result model
-	 * @throws IOException error connecting
-	 */
-	public JenaConnect executeConstructQuery(String queryString) throws IOException {
-		return executeConstructQuery(queryString, false);
-	}
-	
-	/**
-	 * Executes a sparql construct query against the JENA model and returns the constructed result model
-	 * @param queryString the query to execute against the model
-	 * @param datasetMode execute against dataset
-	 * @return the executed query result model
-	 * @throws IOException error connecting
-	 */
-	public JenaConnect executeConstructQuery(String queryString, boolean datasetMode) throws IOException {
-		JenaConnect jc = new MemJenaConnect();
-		jc.getJenaModel().add(buildQueryExec(queryString, datasetMode).execConstruct());
-		return jc;
-	}
-	
-	/**
-	 * Executes a sparql describe query against the JENA model and returns the description result model
-	 * @param queryString the query to execute against the model
-	 * @return the executed query result model
-	 * @throws IOException error connecting
-	 */
-	public JenaConnect executeDescribeQuery(String queryString) throws IOException {
-		return executeDescribeQuery(queryString, false);
-	}
-	
-	/**
-	 * Executes a sparql describe query against the JENA model and returns the description result model
-	 * @param queryString the query to execute against the model
-	 * @param datasetMode execute against dataset
-	 * @return the executed query result model
-	 * @throws IOException error connecting
-	 */
-	public JenaConnect executeDescribeQuery(String queryString, boolean datasetMode) throws IOException {
-		JenaConnect jc = new MemJenaConnect();
-		jc.getJenaModel().add(buildQueryExec(queryString, datasetMode).execDescribe());
-		return jc;
-	}
-	
-	/**
 	 * Executes a sparql describe query against the JENA model and returns the description result model
 	 * @param queryString the query to execute against the model
 	 * @return the executed query result model
@@ -613,80 +502,6 @@ public abstract class JenaConnect {
 		formatSymbols.put(ResultSetFormat.syntaxJSON.getSymbol(), ResultSetFormat.syntaxJSON);
 	}
 	
-	/**
-	 * Execute a Query and output result to System.out
-	 * @param queryParam the query
-	 * @param resultFormatParam the format to return the results in ('RS_RDF',etc for select queries / 'RDF/XML',etc for
-	 *        construct/describe queries)
-	 * @param datasetMode run against dataset rather than model
-	 * @throws IOException error writing to output
-	 */
-	public void executeQuery(String queryParam, String resultFormatParam, boolean datasetMode) throws IOException {
-		executeQuery(queryParam, resultFormatParam, null, datasetMode);
-	}
-	
-	/**
-	 * Execute a Query
-	 * @param queryParam the query
-	 * @param resultFormatParam the format to return the results in ('RS_TEXT' default for select queries / 'RDF/XML'
-	 *        default for construct/describe queries)
-	 * @param output output stream to write to - null uses System.out
-	 * @param datasetMode run against dataset rather than model
-	 * @throws IOException error writing to output
-	 */
-	public void executeQuery(String queryParam, String resultFormatParam, OutputStream output, boolean datasetMode) throws IOException {
-		OutputStream out;
-		if(output != null) {
-			out = output;
-			log.info("Outputting to the specified location");
-		} else {
-			out = System.out;
-		}
-		QueryExecution qe = null;
-		try {
-			Query query = QueryFactory.create(queryParam, Syntax.syntaxARQ);
-			if(datasetMode) {
-//				log.trace("Executing query against dataset");
-				qe = QueryExecutionFactory.create(query, getDataset());
-			} else {
-//				log.trace("Executing query against model");
-				qe = QueryExecutionFactory.create(query, getJenaModel());
-			}
-			if(query.isSelectType()) {
-				ResultSetFormat rsf = formatSymbols.get(resultFormatParam);
-				if(rsf == null) {
-					rsf = ResultSetFormat.syntaxText;
-				}
-				ResultSetFormatter.output(out, qe.execSelect(), rsf);
-			} else if(query.isAskType()) {
-				out.write((Boolean.toString(qe.execAsk())+"\n").getBytes());
-			} else {
-				MemJenaConnect resultModel = new MemJenaConnect();
-				if(query.isConstructType()) {
-					qe.execConstruct(resultModel.getJenaModel());
-				} else if(query.isDescribeType()) {
-					qe.execDescribe(resultModel.getJenaModel());
-				} else {
-					throw new IllegalArgumentException("Query Invalid: Not Select, Construct, Ask, or Describe");
-				}
-				
-				resultModel.exportRdfToStream(out, resultFormatParam);
-			}
-		} catch(QueryParseException e1) {
-			try {
-				executeUpdateQuery(queryParam, datasetMode);
-				log.info("Update Successfully Applied");
-			} catch(QueryParseException e2) {
-				log.error("Invalid Query:\n"+queryParam);
-				log.trace("Attempted Query Exception:",e1);
-				log.trace("Attempted Update Exception:",e2);
-			}
-		} finally {
-			if(qe != null) {
-				qe.close();
-			}
-		}
-	}
 	
 	/**
 	 * Accessor for Jena Model
@@ -851,62 +666,5 @@ public abstract class JenaConnect {
 	 */
 	public void printParameters() {
 		log.trace("modelName: '" + getModelName() + "'");
-	}
-	
-	/**
-	 * Run from commandline
-	 * @param args the commandline args
-	 * @throws IOException error parsing args
-	 * @throws UsageException user requested usage message
-	 */
-	public static void run(String... args) throws IOException, UsageException {
-		ArgList argList = getParser().parse(args);
-		JenaConnect jc = JenaConnect.parseConfig(argList.get("j"), argList.getValueMap("J"));
-		if(jc == null) {
-			throw new IllegalArgumentException("Must specify a jena model");
-		}
-		if(argList.has("t")) {
-			if(argList.has("q") || argList.has("Q")) {
-				throw new IllegalArgumentException("Cannot Execute Query and Truncate");
-			}
-			log.info("Removing all triples");
-			jc.truncate();
-		} else if(argList.has("q")) {
-			jc.executeQuery(argList.get("q"), argList.get("Q"), FileAide.getOutputStream(argList.get("f")), argList.has("d"));
-		} else {
-			throw new IllegalArgumentException("No Operation Specified");
-		}
-		jc.sync();
-	}
-	
-	/**
-	 * Main method
-	 * @param args commandline arguments
-	 */
-	public static void main(String... args) {
-		Exception error = null;
-		try {
-			InitLog.initLogger(args, getParser(), "ft");
-			log.info(getParser().getAppName() + ": Start");
-			run(args);
-		} catch(IllegalArgumentException e) {
-			log.error(e.getMessage());
-			log.debug("Stacktrace:",e);
-			System.err.println(getParser().getUsage());
-			error = e;
-		} catch(UsageException e) {
-			log.info("Printing Usage:");
-			System.out.println(getParser().getUsage());
-			error = e;
-		} catch(Exception e) {
-			log.error(e.getMessage());
-			log.debug("Stacktrace:",e);
-			error = e;
-		} finally {
-			log.info(getParser().getAppName() + ": End");
-			if(error != null) {
-				System.exit(1);
-			}
-		}
 	}
 }

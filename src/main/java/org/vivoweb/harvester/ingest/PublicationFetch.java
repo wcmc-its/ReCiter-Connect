@@ -39,8 +39,8 @@ import org.vivoweb.harvester.util.repo.SDBJenaConnect;
 import org.w3c.dom.Document;
 import org.xml.sax.InputSource;
 
-import com.hp.hpl.jena.query.QuerySolution;
-import com.hp.hpl.jena.query.ResultSet;
+import org.apache.jena.query.QuerySolution;
+import org.apache.jena.query.ResultSet;
 
 import reciter.connect.beans.vivo.*;
 import reciter.connect.database.mysql.MysqlConnectionFactory;

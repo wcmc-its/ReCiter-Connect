@@ -9,13 +9,14 @@ import java.util.Iterator;
 
 import java.util.List;
 import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.jena.query.QuerySolution;
+import org.apache.jena.query.ResultSet;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
 
 import lombok.extern.slf4j.Slf4j;
 
-import com.hp.hpl.jena.query.QuerySolution;
 import com.unboundid.ldap.sdk.SearchResultEntry;
 
 import reciter.connect.beans.vivo.PeopleBean;
@@ -493,7 +494,7 @@ public class AcademicFetchFromED {
 			
 			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
 			
-			com.hp.hpl.jena.query.ResultSet rs = runSparqlTemplate(sparqlQuery, vivoJena);
+			ResultSet rs = runSparqlTemplate(sparqlQuery, vivoJena);
 			
 			QuerySolution qs = rs.nextSolution();
 			count = Integer.parseInt(qs.get("c").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
@@ -546,7 +547,7 @@ public class AcademicFetchFromED {
 			SDBJenaConnect vivoJena;
 			try {
 				vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
-				com.hp.hpl.jena.query.ResultSet rs = runSparqlTemplate(sparqlQuery, vivoJena);
+				ResultSet rs = runSparqlTemplate(sparqlQuery, vivoJena);
 				QuerySolution qs = null;
 					if(rs.hasNext()) {
 						qs = rs.nextSolution();
@@ -845,8 +846,8 @@ public class AcademicFetchFromED {
 		 * @return ResultSet containing all the results
 		 * @throws IOException default exception thrown
 		 */
-		private com.hp.hpl.jena.query.ResultSet runSparqlTemplate(String sparqlQuery, SDBJenaConnect vivoJena) throws IOException {
-			com.hp.hpl.jena.query.ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery);		
+		private ResultSet runSparqlTemplate(String sparqlQuery, SDBJenaConnect vivoJena) throws IOException {
+			ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery);		
 			return rs;
 		}
 		

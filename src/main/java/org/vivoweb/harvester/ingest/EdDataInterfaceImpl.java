@@ -3,6 +3,9 @@ package org.vivoweb.harvester.ingest;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.apache.jena.query.QuerySolution;
+import org.apache.jena.query.ResultSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -11,8 +14,6 @@ import org.vivoweb.harvester.util.repo.SDBJenaConnect;
 import lombok.extern.slf4j.Slf4j;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
 
-import com.hp.hpl.jena.query.QuerySolution;
-import com.hp.hpl.jena.query.ResultSet;
 
 /**
  * @author Sarbajit Dutta (szd2013@med.cornell.edu)

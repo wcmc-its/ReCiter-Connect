@@ -24,8 +24,8 @@ import org.vivoweb.harvester.util.repo.SDBJenaConnect;
 
 import lombok.extern.slf4j.Slf4j;
 
-import com.hp.hpl.jena.query.QuerySolution;
-import com.hp.hpl.jena.query.ResultSet;
+import org.apache.jena.query.QuerySolution;
+import org.apache.jena.query.ResultSet;
 
 import reciter.connect.beans.vivo.GrantBean;
 import reciter.connect.database.mssql.MssqlConnectionFactory;

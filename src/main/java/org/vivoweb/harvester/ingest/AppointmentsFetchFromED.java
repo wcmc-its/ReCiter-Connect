@@ -12,6 +12,8 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.jena.query.QuerySolution;
+import org.apache.jena.query.ResultSet;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -23,7 +25,6 @@ import org.vivoweb.harvester.util.repo.SDBJenaConnect;
 
 import lombok.extern.slf4j.Slf4j;
 
-import com.hp.hpl.jena.query.QuerySolution;
 import com.unboundid.ldap.sdk.SearchResultEntry;
 
 
@@ -750,7 +751,7 @@ public class AppointmentsFetchFromED {
 				
 				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
 				
-				com.hp.hpl.jena.query.ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
+				ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
 				
 				
 				if(!rs.hasNext()) {
@@ -990,7 +991,7 @@ public class AppointmentsFetchFromED {
 				
 				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
 				
-				com.hp.hpl.jena.query.ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
+				ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
 				
 				
 				if(rs != null && !rs.hasNext()) {
@@ -1157,7 +1158,7 @@ public class AppointmentsFetchFromED {
 			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
 			
 			try {
-				com.hp.hpl.jena.query.ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
+				ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
 				
 				
 				while(rs.hasNext()) {
@@ -1384,10 +1385,8 @@ public class AppointmentsFetchFromED {
 			
 			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
 			
-			com.hp.hpl.jena.query.ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
-			
-			
-				QuerySolution qs = rs.nextSolution();
+			ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
+			QuerySolution qs = rs.nextSolution();
 			
 			
 			count = Integer.parseInt(qs.get("positionCount").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
@@ -1411,12 +1410,8 @@ public class AppointmentsFetchFromED {
 		 * @return ResultSet containing all the results
 		 * @throws IOException default exception thrown
 		 */
-		private com.hp.hpl.jena.query.ResultSet runSparqlTemplate(String sparqlQuery, SDBJenaConnect vivoJena) throws IOException {
-			
-			com.hp.hpl.jena.query.ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery);		
-			return rs;
-			
-		
+		private ResultSet runSparqlTemplate(String sparqlQuery, SDBJenaConnect vivoJena) throws IOException {		
+			return vivoJena.executeSelectQuery(sparqlQuery);
 		}
 		
 		/**

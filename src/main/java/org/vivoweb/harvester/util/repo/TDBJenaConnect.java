@@ -7,11 +7,15 @@ package org.vivoweb.harvester.util.repo;
 
 import java.io.IOException;
 import java.util.HashMap;
+
+import org.apache.jena.query.Dataset;
+import org.apache.jena.tdb.TDBFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.vivoweb.harvester.util.FileAide;
-import com.hp.hpl.jena.query.Dataset;
-import com.hp.hpl.jena.tdb.TDBFactory;
+
+/* import com.hp.hpl.jena.query.Dataset;
+import com.hp.hpl.jena.tdb.TDBFactory; */
 
 /**
  * Connection Helper for TDB Jena Models
@@ -25,7 +29,7 @@ public class TDBJenaConnect extends JenaConnect {
 	/**
 	 * Mapping of directory to Dataset
 	 */
-	private static HashMap<String, Dataset> dirDatasets = new HashMap<String, Dataset>();
+	private static HashMap<String, Dataset> dirDatasets = new HashMap<>();
 	/**
 	 * the TDB directory name
 	 */
