@@ -50,7 +50,18 @@
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
-    </dependency>
+	</dependency>
+	<dependency>
+		<groupId>org.apache.jena</groupId>
+		<artifactId>apache-jena-libs</artifactId>
+		<type>pom</type>
+		<version>3.14.0</version>
+	</dependency>
+	<dependency>
+		<groupId>org.apache.jena</groupId>
+		<artifactId>jena-sdb</artifactId>
+		<version>3.14.0</version>
+	</dependency>
 	<!-- https://mvnrepository.com/artifact/javax.inject/javax.inject -->
 	<dependency>
 		<groupId>javax.inject</groupId>
