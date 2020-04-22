@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
 
 import lombok.extern.slf4j.Slf4j;
+import reciter.connect.vivo.sdb.VivoGraphs;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,7 +33,6 @@ public class JenaConnectionFactory {
 	/**
 	 * This is the default namespace for your institution
 	 */
-    @Value("${vivoNamespace}")
     public String nameSpaceProp;
     public static String nameSpace;
 	
@@ -53,14 +53,15 @@ public class JenaConnectionFactory {
     @Autowired(required = true)
     public JenaConnectionFactory(@Value("${jena.dbUsername}") String username, Environment env, @Value("${jena.url}") String url,
     @Value("${jena.dbModel}") String dbModel, @Value("${jena.dbLayout}") String dbLayout, @Value("${jena.dbType}") String dbType,
-    @Value("${jena.dbDriver}") String dbDriver) {
+    @Value("${jena.dbDriver}") String dbDriver, @Value("${vivoNamespace}") String namespace) {
         this.jenaDbUser = username;
         this.jenaDbPassword = env.getProperty("JENA_DB_PASSWORD");
         this.dbHost = url;
         this.dbType = dbType;
         this.dbModel = dbModel;
         this.dbLayout = dbLayout;
-        this.dbDriver = dbDriver;
+		this.dbDriver = dbDriver;
+		this.nameSpaceProp = namespace;
 		initialize();
 	}
 	
@@ -78,13 +79,13 @@ public class JenaConnectionFactory {
 	private void initializeConnectionPool() {
 		while(!checkIfConnectionPoolIsFull()) {
 			log.info("Jena pool is not full. Proceeding with adding new connection");
-			this.connectionPool.put(createNewConnectionForPool("http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople"),"wcmcPeople");
-			this.connectionPool.put(createNewConnectionForPool("http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa"),"wcmcOfa");
-			this.connectionPool.put(createNewConnectionForPool("http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus"),"wcmcCoeus");
-			this.connectionPool.put(createNewConnectionForPool("http://vitro.mannlib.cornell.edu/a/graph/wcmcPublications"),"wcmcPublications");
-			this.connectionPool.put(createNewConnectionForPool("http://vitro.mannlib.cornell.edu/a/graph/wcmcVivo"),"wcmcVivo");
-			this.connectionPool.put(createNewConnectionForPool("http://vitro.mannlib.cornell.edu/default/vitro-kb-inf"),"vitro-kb-inf");
-			this.connectionPool.put(createNewConnectionForPool("http://vitro.mannlib.cornell.edu/default/vitro-kb-2"),"vitro-kb-2");
+			this.connectionPool.put(createNewConnectionForPool(VivoGraphs.PEOPLE_GRAPH.getValue()),"wcmcPeople");
+			this.connectionPool.put(createNewConnectionForPool(VivoGraphs.OFA_GRAPH.getValue()),"wcmcOfa");
+			this.connectionPool.put(createNewConnectionForPool(VivoGraphs.INFOED_GRAPH.getValue()),"wcmcCoeus");
+			this.connectionPool.put(createNewConnectionForPool(VivoGraphs.PUBLICATIONS_GRAPH.getValue()),"wcmcPublications");
+			//this.connectionPool.put(createNewConnectionForPool("http://vitro.mannlib.cornell.edu/a/graph/wcmcVivo"),"wcmcVivo");
+			this.connectionPool.put(createNewConnectionForPool(VivoGraphs.VITRO_KB_INF_GRAPH.getValue()),"vitro-kb-inf");
+			this.connectionPool.put(createNewConnectionForPool(VivoGraphs.DEFAULT_KB_2_GRAPH.getValue()),"vitro-kb-2");
 			this.connectionPool.put(createNewDataSetConnectionForPool(),"dataSet");
 		}
 		log.info("Jena connection pool is full");
