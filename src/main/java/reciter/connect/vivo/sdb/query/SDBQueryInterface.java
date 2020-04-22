@@ -16,19 +16,20 @@ public class SDBQueryInterface {
 	private JenaConnectionFactory jcf;
 
     public void query() {
-        String sparqlQuery = 
-        "SELECT  ?s ?p ?o \n" +
-        "WHERE \n" +
-        "{ \n" +
-        "?s ?p ?o . \n" +
-        "} LIMIT 3";
-        SDBJenaConnect vivoJena = jcf.getConnectionfromPool("vitro-kb-2");
+        StringBuilder sb = new StringBuilder();
+        sb.append("SELECT ?g ?p ?o \n");
+		sb.append("WHERE { \n");
+		sb.append("GRAPH ?g { \n");
+		sb.append("?s ?p ?o . \n");
+		sb.append("}} LIMIT 3");
+        SDBJenaConnect vivoJena = jcf.getConnectionfromPool("dataSet");
         ResultSet rs;
         try {
-            rs = vivoJena.executeSelectQuery(sparqlQuery);
+            rs = vivoJena.executeSelectQuery(sb.toString(), true);
             while(rs.hasNext())
             {
                 QuerySolution qs =rs.nextSolution();
+                System.out.println(qs.getResource("g").getURI());
                 if(qs.get("s") != null) {
                     System.out.println(qs.get("s").toString());
                 }
@@ -37,7 +38,7 @@ public class SDBQueryInterface {
         } catch(IOException e) {
             System.out.println(e);
         }
-        jcf.returnConnectionToPool(vivoJena, "vitro-kb-2");
+        jcf.returnConnectionToPool(vivoJena, "dataSet");
     }
 
 }
