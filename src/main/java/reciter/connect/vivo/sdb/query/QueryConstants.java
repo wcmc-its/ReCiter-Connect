@@ -43,6 +43,7 @@ public class QueryConstants {
         put("obo", "http://purl.obolibrary.org/obo/");
         put("vcard", "http://www.w3.org/2006/vcard/ns#");
         put("wcmc", "http://weill.cornell.edu/vivo/ontology/wcmc#");
+        put("fabio", "http://purl.org/spar/fabio");
     } };
 
     public static String getSparqlPrefixQuery() {

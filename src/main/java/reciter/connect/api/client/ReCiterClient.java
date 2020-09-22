@@ -32,6 +32,7 @@ public class ReCiterClient {
             .uri(uriBuilder -> uriBuilder
                 .path("/reciter/article-retrieval/by/uid")
                 .queryParam("uid", uid)
+                .queryParam("filterByFeedback", "ACCEPTED_ONLY")
             .build())
             .retrieve()
             .onStatus(HttpStatus::is4xxClientError, clientResponse -> {

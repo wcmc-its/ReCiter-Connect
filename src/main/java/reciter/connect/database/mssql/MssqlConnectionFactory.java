@@ -70,7 +70,7 @@ public class MssqlConnectionFactory {
 		this.infoEdUsername = infoEdUsername;
 		this.infoEdPassword = env.getProperty("MSSQL_INFOED_DB_PASSWORD");
 		this.infoEdUrl = env.getProperty("MSSQL_INFOED_DB_URL");
-		//initialize();
+		initialize();
 	}
 	
 	/**

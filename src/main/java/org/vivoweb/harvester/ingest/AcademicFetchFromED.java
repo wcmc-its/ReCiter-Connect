@@ -22,6 +22,7 @@ import com.unboundid.ldap.sdk.SearchResultEntry;
 import reciter.connect.beans.vivo.PeopleBean;
 import reciter.connect.database.ldap.LDAPConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
+import reciter.connect.vivo.sdb.VivoGraphs;
 
 /**
  * @author szd2013
@@ -108,7 +109,7 @@ public class AcademicFetchFromED {
 		private void getActivePeopleFromED() {
 
 			int noCwidCount = 0;
-			String filter = "(&(objectClass=eduPerson)(weillCornellEduPersonTypeCode=academic))";
+			String filter = "(&(objectClass=eduPerson)(weillCornellEduCWID=rak2007)(weillCornellEduPersonTypeCode=academic))";
 			
 			List<SearchResultEntry> results = lcf.searchWithBaseDN(filter,"ou=people,dc=weill,dc=cornell,dc=edu");
 			
@@ -486,17 +487,20 @@ public class AcademicFetchFromED {
 			String sparqlQuery = "PREFIX rdf:      <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 									"PREFIX foaf:     <http://xmlns.com/foaf/0.1/> \n" +
 									"SELECT  (count(rdf:type) as ?c) \n" +
-									"FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n" +
-									"WHERE \n" +
-									"{ \n" +
+									//"FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n" +
+									"WHERE {\n" +
+									"GRAPH <" + VivoGraphs.PEOPLE_GRAPH + "> {" +
 									"<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> rdf:type foaf:Person . \n" +
-									"}";
+									"}}";
+
+			log.debug(sparqlQuery);
 			
 			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
 			
-			ResultSet rs = runSparqlTemplate(sparqlQuery, vivoJena);
-			
+			//ResultSet rs = runSparqlTemplate(sparqlQuery, vivoJena);
+			ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery, true);
 			QuerySolution qs = rs.nextSolution();
+			log.info(qs.getLiteral("c").getInt() + "Count");
 			count = Integer.parseInt(qs.get("c").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
 			
 			//Close the connection
@@ -529,9 +533,10 @@ public class AcademicFetchFromED {
 					"PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n" +
 					"PREFIX vcard: <http://www.w3.org/2006/vcard/ns#> \n" +
 					"SELECT ?label ?type ?phone ?title ?email ?firstName ?lastName ?middleName ?popsUrl\n" +
-					"FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n" +
+					//"FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n" +
 					"WHERE \n" +
 					"{ \n" +
+					"GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> {\n" +
 					"<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:personLabel ?label .\n" +
 					"<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> vitro:mostSpecificType ?type .\n" +
 					"<" + this.vivoNamespace + "hasTitle-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#title> ?title . \n" +
@@ -541,13 +546,13 @@ public class AcademicFetchFromED {
 					"OPTIONAL { <" + this.vivoNamespace + "hasEmail-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#email> ?email . }\n" +
 					"OPTIONAL { <" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> core:middleName ?middleName . }\n" +
 					"OPTIONAL { <" + this.vivoNamespace + "popsUrl-" + pb.getCwid().trim() + "> vcard:url ?popsUrl } \n" +
-					"}";
+					"}}";
 			
-			log.info(sparqlQuery);
+			log.debug(sparqlQuery);
 			SDBJenaConnect vivoJena;
 			try {
 				vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
-				ResultSet rs = runSparqlTemplate(sparqlQuery, vivoJena);
+				ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery, true);//runSparqlTemplate(sparqlQuery, vivoJena);
 				QuerySolution qs = null;
 					if(rs.hasNext()) {
 						qs = rs.nextSolution();
