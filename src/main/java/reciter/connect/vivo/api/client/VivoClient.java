@@ -78,5 +78,26 @@ public class VivoClient {
             }
         });
     }
+
+
+    public String vivoQueryApi(String query) {
+
+        LinkedMultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("email", vivoApiUsername);
+        body.add("password", vivoApiPassword);
+        body.add("query", query);
+        
+         return this.webClient.post()
+                    .uri(uriBuilder -> uriBuilder
+                        .path("/api/sparqlQuery")
+                    .build())
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .header("Accept", "application/sparql-results+json")
+                    .body(BodyInserters.fromFormData(body))
+                    .exchange()
+                    .flatMap(response -> response.toEntity(String.class))
+                    .block()
+                    .getBody();
+    }
     
 }

@@ -24,6 +24,7 @@ import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.vivoweb.harvester.ingest.AcademicFetchFromED;
+import org.vivoweb.harvester.ingest.EdDataInterface;
 
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -62,6 +63,9 @@ public class Application implements ApplicationRunner {
 
     @Autowired
     private VivoClient vivoClient;
+
+    @Autowired
+    private EdDataInterface edDataInterface;
 
     @Bean
     public WebClient getWebClient() {
@@ -104,13 +108,13 @@ public class Application implements ApplicationRunner {
         AcademicFetchFromED academicFetchFromED = context.getBean(AcademicFetchFromED.class);
 
 
-        /* try {
+        try {
             academicFetchFromED.execute();
         } catch (IOException e) {
             log.error("IOException", e);
         }
 
-        ReCiterClient reCiterClient = context.getBean(ReCiterClient.class);
+        /*ReCiterClient reCiterClient = context.getBean(ReCiterClient.class);
         // ArticleRetrievalModel pubs =
         // reCiterClient.getPublicationsByUid("paa2013").block();
         
@@ -123,13 +127,6 @@ public class Application implements ApplicationRunner {
         }   catch(Exception e) {
          log.error("Exception", e); 
         } */
-        StringBuilder sb = new StringBuilder();
-        sb.append("INSERT DATA { \n");
-        sb.append("GRAPH <http://vitro.mannlib.cornell.edu/default/vitro-kb-2> { \n");
-        sb.append("<http://test.domain/ns#book1> <http://purl.org/dc/elements/1.1/title> \"DataStructure and algorithm\" . \n");
-        sb.append("}}");
-
-        log.info(vivoClient.vivoUpdateApi(sb.toString()));
         
          
         if (ldapConnectionFactory != null)

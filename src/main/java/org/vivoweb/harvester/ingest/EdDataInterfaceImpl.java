@@ -1,18 +1,17 @@
 package org.vivoweb.harvester.ingest;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.jena.query.QuerySolution;
-import org.apache.jena.query.ResultSet;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
 
 import lombok.extern.slf4j.Slf4j;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
+import reciter.connect.vivo.api.client.VivoClient;
 
 
 /**
@@ -22,6 +21,9 @@ import reciter.connect.database.mysql.jena.JenaConnectionFactory;
 @Service("edDataInterface")
 @Slf4j
 public class EdDataInterfaceImpl implements EdDataInterface {
+
+	@Autowired
+	private VivoClient vivoClient;
 
 	public List<String> getPeopleInVivo(JenaConnectionFactory jcf) {
 		
@@ -36,22 +38,22 @@ public class EdDataInterfaceImpl implements EdDataInterface {
 				"?people rdf:type foaf:Person . \n" +
 				//"FILTER(REGEX(STR(?people),\"rak2007\")) \n" +
 				"}";
-		SDBJenaConnect vivoJena = jcf.getConnectionfromPool("wcmcPeople");
-		ResultSet rs;
+
 		try {
-			rs = vivoJena.executeSelectQuery(sparqlQuery);
-			while(rs.hasNext())
-			{
-				QuerySolution qs =rs.nextSolution();
-				if(qs.get("people") != null) {
-					people.add(qs.get("people").toString().replace(JenaConnectionFactory.nameSpace + "cwid-", "").trim());
+			String response = vivoClient.vivoQueryApi(sparqlQuery);
+			log.info(response);
+			JSONObject obj = new JSONObject(response);
+			JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+			if(bindings != null && !bindings.isEmpty()) {
+				for (int i = 0; i < bindings.length(); ++i) {
+					people.add(bindings.getJSONObject(i).getJSONObject("people").getString("value").replace("http://vivo.med.cornell.edu/individual/cwid-", ""));
 				}
-				
+			} else {
+				log.info("No result from the query");
 			}
-		} catch(IOException e) {
-			log.info("IOException" , e);
+		} catch(Exception e) {
+			log.error("Exception", e);
 		}
-		jcf.returnConnectionToPool(vivoJena, "wcmcPeople");
 		return people;
 	}
 	
