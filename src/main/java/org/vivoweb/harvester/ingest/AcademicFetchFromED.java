@@ -106,7 +106,7 @@ public class AcademicFetchFromED {
 		private void getActivePeopleFromED() {
 
 			int noCwidCount = 0;
-			String filter = "(&(objectClass=eduPerson)(|(weillCornellEduCWID=ccole)(weillCornellEduCWID=paa2013)(weillCornellEduCWID=rak2007))(weillCornellEduPersonTypeCode=academic))";
+			String filter = "(&(objectClass=eduPerson)(weillCornellEduPersonTypeCode=academic))";
 			
 			List<SearchResultEntry> results = lcf.searchWithBaseDN(filter,"ou=people,dc=weill,dc=cornell,dc=edu");
 			
@@ -290,7 +290,7 @@ public class AcademicFetchFromED {
 			}
 
 			
-			insertInferenceTriples(pb);
+			//insertInferenceTriples(pb);
 		}
 		
 		/**
@@ -792,7 +792,7 @@ public class AcademicFetchFromED {
 			
 			//Run inferencing on the updated triples
 			
-			insertInferenceTriples(pb);
+			//insertInferenceTriples(pb);
 			
 			
 		}
