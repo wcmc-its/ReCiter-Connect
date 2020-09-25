@@ -26,10 +26,13 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.apache.jena.query.QuerySolution;
 import org.apache.jena.query.ResultSet;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import reciter.connect.beans.vivo.GrantBean;
 import reciter.connect.database.mssql.MssqlConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
+import reciter.connect.vivo.api.client.VivoClient;
 
 /**
  * @author Sarbajit Dutta (szd2013@med.cornell.edu)
@@ -64,6 +67,9 @@ public class GrantsFetchFromED {
 
 	@Autowired
 	private EdDataInterface edi;
+
+	@Autowired
+	private VivoClient vivoClient;
 	
 	/**
 	 * The default namespace for VIVO
@@ -103,7 +109,7 @@ public class GrantsFetchFromED {
 				if(grant.isEmpty())
 					log.info("There is no grants for cwid - " + cwid + " in Coeus");
 				checkGrantExistInVivo(grant,cwid);
-				deleteConfidentialGrants(grant, cwid);
+				//deleteConfidentialGrants(grant, cwid);
 				log.info("#########################################################");
 			}
 			
@@ -128,15 +134,7 @@ public class GrantsFetchFromED {
 		 * @param cwid unique identifier for faculty
 		 */
 		private void checkGrantExistInVivo(List<GrantBean> grants, String cwid) {
-			
-			
-			
-			
-			SDBJenaConnect vivoJena = null;
-			
-			
 			for(int i=0; i< grants.size(); i++) {
-				vivoJena = this.jcf.getConnectionfromPool("wcmcCoeus");
 				String sparqlQuery = "PREFIX rdf:      <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 					 "PREFIX foaf:     <http://xmlns.com/foaf/0.1/> \n" +
 					 "SELECT  (count(?o) as ?grant) \n" +
@@ -145,38 +143,25 @@ public class GrantsFetchFromED {
 					 "{ \n" +
 					 "<" + this.vivoNamespace + "grant-" + grants.get(i).getAwardNumber().trim() + "> ?p ?o . \n" +
 					 "}";
-				
-				
-				//log.info("Checking grant " + grants.get(i));
 				try {
-					ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery);
-					
-					QuerySolution qs = rs.nextSolution();
-					
-					
-					int count = Integer.parseInt(qs.get("grant").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
+					String response = this.vivoClient.vivoQueryApi(sparqlQuery);
+					log.info(response);
+					JSONObject obj = new JSONObject(response);
+					JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+					int count = bindings.getJSONObject(0).getJSONObject("grant").getInt("value");
 					if(count > 0) {
 						log.info("Grant- " + grants.get(i).getAwardNumber() + " exists in VIVO");
 						//This is done to return the connection for coeus since it is being used again in the update function
-						this.jcf.returnConnectionToPool(vivoJena, "wcmcCoeus");
 						checkForUpdates(grants.get(i), cwid, "UPDATE");
 					}
 					else {
-						this.jcf.returnConnectionToPool(vivoJena, "wcmcCoeus");
 						insertGrantsInVivo(grants.get(i),cwid,"INSERT");
 						this.insertCount = this.insertCount + 1;
 					}
-					
-					
-					
-				} catch(IOException e) {
-					// TODO Auto-generated catch block
-					log.error("IOException" ,e);
+				} catch(Exception e) {
+					log.error("Api Exception", e);
 				}
-				
-				
 			}
-			
 		}
 		
 		
@@ -194,36 +179,36 @@ public class GrantsFetchFromED {
 			String endDate = null;
 			DateFormat shortFormat = new SimpleDateFormat("yyyy-MM-dd",Locale.ENGLISH);
 			DateFormat mediumFormat = new SimpleDateFormat("dd-MMM-yy",Locale.ENGLISH);
-			
-			
-			SDBJenaConnect vivoJena = null;
-			vivoJena = this.jcf.getConnectionfromPool("wcmcCoeus");
-			
 			//get contributor list & date interval for that grant from VIVO
 			StringBuilder sb = new StringBuilder();
 			sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
-			sb.append("select ?o \n");
+			sb.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
+			sb.append("PREFIX foaf: <http://xmlns.com/foaf/0.1/> \n");
+			sb.append("select ?person ?dateTimeInterval \n");
 			sb.append("from <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> \n");
 			sb.append("where { \n");
-			sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> ?p ?o . \n");
-			sb.append("FILTER(REGEX(STR(?o)," + "\"" + this.vivoNamespace + "cwid-\") || REGEX(STR(?o)," + "\"" + this.vivoNamespace + "dtinterval-\")) \n");
+			sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates ?person . \n");
+			sb.append("?person rdf:type foaf:Person . \n");
+			sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:dateTimeInterval ?dateTimeInterval . \n");
 			sb.append("}");
 			
 			//log.info(sb.toString());
 			
 			try{
-				ResultSet rs = vivoJena.executeSelectQuery(sb.toString());
-				while(rs.hasNext()) {
-					QuerySolution qs = rs.nextSolution();
-					if(qs.get("o").toString().contains(this.vivoNamespace + "cwid-")) {
-						contributors.add(qs.get("o").toString().replace(this.vivoNamespace + "cwid-", "").trim());
+				String response = vivoClient.vivoQueryApi(sb.toString());
+				log.info(response);
+				JSONObject obj = new JSONObject(response);
+				JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+				if(bindings != null && !bindings.isEmpty()) {
+					for (int i = 0; i < bindings.length(); ++i) {
+						contributors.add(bindings.getJSONObject(i).getJSONObject("person").getString("value").replace(this.vivoNamespace + "cwid-", ""));
 					}
-					else
-						dateTimeInterval = qs.get("o").toString().replace(this.vivoNamespace + "dtinterval-", "").trim();
+					dateTimeInterval = bindings.getJSONObject(0).getJSONObject("dateTimeInterval").getString("value").replace(this.vivoNamespace + "dtinterval-", "").trim();
+				} else {
+					log.info("No result from the query");
 				}
-				
-			} catch(IOException e) {
-				log.error("IOException" ,e);
+			} catch(Exception e) {
+				log.error("API Exception" ,e);
 			}
 			
 			//Checking for new contributors
@@ -424,9 +409,9 @@ public class GrantsFetchFromED {
 				
 				//log.info(sb.toString());
 				try {
-					vivoJena.executeUpdateQuery(sb.toString(), true);
-				} catch(IOException e) {
-					// TODO Auto-generated catch block
+					String response = this.vivoClient.vivoUpdateApi(sb.toString());
+					log.info(response);
+				} catch(Exception e) {
 					log.error("Error in updating grant data: ", e);
 				}
 				
@@ -434,16 +419,13 @@ public class GrantsFetchFromED {
 				
 				gb.setContributors(newContributors);
 				
-				if(!newContributors.isEmpty())
-					insertInferenceTriples(gb, crudStatus);
+				/* if(!newContributors.isEmpty())
+					insertInferenceTriples(gb, crudStatus); */
 				
 				this.updateCount = this.updateCount + 1;
 			}
 			else
 				log.info("No updates are necessary for grant-" + gb.getAwardNumber());
-			
-			this.jcf.returnConnectionToPool(vivoJena, "wcmcCoeus");
-			
 			checkForSponsorUpdate(gb);
 		}
 		
@@ -451,12 +433,7 @@ public class GrantsFetchFromED {
 		 * This function is to sync Sponsor Code and Label
 		 * @param gb
 		 */
-		private void checkForSponsorUpdate(GrantBean gb) {
-			
-			SDBJenaConnect vivoJena = null;
-			vivoJena = this.jcf.getConnectionfromPool("wcmcCoeus");
-			SDBJenaConnect vivoKbInf = this.jcf.getConnectionfromPool("vitro-kb-inf");
-			
+		private void checkForSponsorUpdate(GrantBean gb) {			
 			//get contributor list & date interval for that grant from VIVO
 			StringBuilder sb = new StringBuilder();
 			sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
@@ -473,13 +450,16 @@ public class GrantsFetchFromED {
 			//log.info(sb.toString());
 			
 			try{
-				ResultSet rs = vivoJena.executeSelectQuery(sb.toString());
-				while(rs.hasNext()) {
-					QuerySolution qs = rs.nextSolution();
-					if(qs.get("fundingOrganization") != null && qs.get("fundingOrganizationLabel") != null) {
-						if(qs.get("fundingOrganization").toString().contains(this.vivoNamespace + "org-f")) {
-							String fundingOrganizationCode = qs.get("fundingOrganization").toString().replace(this.vivoNamespace + "org-f", "").trim();
-							String fundingOrganizationLabel = qs.get("fundingOrganizationLabel").toString();
+				String response = this.vivoClient.vivoQueryApi(sb.toString());
+				log.info(response);
+				JSONObject obj = new JSONObject(response);
+				JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+				if(bindings != null && !bindings.isEmpty()) {
+					if(bindings.getJSONObject(0).optJSONObject("fundingOrganization") != null && bindings.getJSONObject(0).optJSONObject("fundingOrganization").has("value") &&
+					bindings.getJSONObject(0).optJSONObject("fundingOrganizationLabel") != null && bindings.getJSONObject(0).optJSONObject("fundingOrganizationLabel").has("value")) {
+						if(bindings.getJSONObject(0).getJSONObject("fundingOrganization").getString("value").contains(this.vivoNamespace + "org-f")) {
+							String fundingOrganizationCode = bindings.getJSONObject(0).getJSONObject("fundingOrganization").getString("value").replace(this.vivoNamespace + "org-f", "").trim();
+							String fundingOrganizationLabel = bindings.getJSONObject(0).getJSONObject("fundingOrganizationLabel").getString("value");
 							//Update only label
 							if(fundingOrganizationCode.equalsIgnoreCase(gb.getSponsorCode())
 									&&
@@ -498,7 +478,8 @@ public class GrantsFetchFromED {
 								sb.append("<" + this.vivoNamespace + "org-f" + gb.getSponsorCode() + "> rdfs:label ?o . \n");
 								sb.append("}");
 								
-								vivoJena.executeUpdateQuery(sb.toString(), true);
+								response = vivoClient.vivoUpdateApi(sb.toString());
+								log.info(response);
 							}
 							//Update entire funding organization
 							if(!fundingOrganizationCode.equalsIgnoreCase(gb.getSponsorCode())
@@ -532,7 +513,8 @@ public class GrantsFetchFromED {
 								sb.append("<" + this.vivoNamespace + "org-f" + gb.getSponsorCode() + "> ?p ?o . \n");
 								sb.append("}");
 								
-								vivoJena.executeUpdateQuery(sb.toString(), true);
+								response = vivoClient.vivoUpdateApi(sb.toString());
+								log.info(response);
 								
 								
 								sb.setLength(0);
@@ -553,17 +535,16 @@ public class GrantsFetchFromED {
 								sb.append("<" + this.vivoNamespace + "org-f" + gb.getSponsorCode() + "> vitro:mostSpecificType core:FundingOrganization . \n");
 								sb.append("}}");
 								
-								vivoKbInf.executeUpdateQuery(sb.toString(), true);
+								/* response = vivoClient.vivoUpdateApi(sb.toString());
+								log.info(response); */ 
 							}
 						}
 					}
 				}
 				
-			} catch(IOException e) {
-				log.error("IOException" ,e);
+			} catch(Exception e) {
+				log.error("VIVO API Exception" ,e);
 			}
-			this.jcf.returnConnectionToPool(vivoKbInf, "vitro-kb-inf");
-			this.jcf.returnConnectionToPool(vivoJena, "wcmcCoeus");
 		}
 		
 		/**
@@ -761,7 +742,7 @@ public class GrantsFetchFromED {
 			sb.append("INSERT DATA { GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> { \n");
 			sb.append("<" + this.vivoNamespace + "cwid-" + cwid + "> rdf:type <http://xmlns.com/foaf/0.1/Person> . \n");
 			sb.append("<" + this.vivoNamespace + "cwid-" + cwid + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
-				sb.append("<" + this.vivoNamespace + "cwid-" + cwid + "> core:relatedBy <" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> . \n");
+			sb.append("<" + this.vivoNamespace + "cwid-" + cwid + "> core:relatedBy <" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> . \n");
 				Map<String, String> contributors = gb.getContributors();
 				Iterator<Entry<String, String>> it = contributors.entrySet().iterator();
 				while(it.hasNext()) {
@@ -770,7 +751,7 @@ public class GrantsFetchFromED {
 					ctype = pair.getValue().toString();
 					
 					if(ctype.equals("PrincipalInvestigatorRole")) {
-						if(cwid.equals(contributor)) 
+						if(cwid.equals(contributor))  
 							sb.append("<" + this.vivoNamespace + "cwid-" + cwid.trim() + "> obo:RO_0000053 <" + this.vivoNamespace + "role-pi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
 						sb.append("<" + this.vivoNamespace + "role-pi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> rdf:type core:PrincipalInvestigatorRole . \n");
 						sb.append("<" + this.vivoNamespace + "role-pi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> obo:RO_0000052 <" + this.vivoNamespace + "cwid-" + contributor.trim() + "> . \n");
@@ -925,24 +906,13 @@ public class GrantsFetchFromED {
 			
 			sb.append("}}");
 			log.info(sb.toString());
-			
-			
-			SDBJenaConnect vivoJena = null;
-			
-			vivoJena = this.jcf.getConnectionfromPool("wcmcCoeus");
-			try {
-				vivoJena.executeUpdateQuery(sb.toString(), true);
-				
-			} catch(IOException e) {
-				// TODO Auto-generated catch block
-				log.error("IOException" ,e);
+			try{
+				String response = this.vivoClient.vivoUpdateApi(sb.toString());
+				log.info(response);
+			} catch(Exception  e) {
+				log.info("Api Exception", e);
 			}
-			
-			
-			this.jcf.returnConnectionToPool(vivoJena, "wcmcCoeus");
-				
-			
-			insertInferenceTriples(gb, crudStatus);
+			//insertInferenceTriples(gb, crudStatus);
 			log.info("Successful insertion of grant-" + gb.getAwardNumber() + " for cwid: " + cwid);
 		}
 
@@ -1049,22 +1019,12 @@ public class GrantsFetchFromED {
 			}
 			sb.append("}}");
 			
-			
-			SDBJenaConnect vivoJena = null;
-			
 			log.info("Inserting inference triples for grant-" + gb.getAwardNumber());
-			vivoJena = this.jcf.getConnectionfromPool("vitro-kb-inf");
 			try {
-				vivoJena.executeUpdateQuery(sb.toString(), true);
-				
-			} catch(IOException e) {
-				log.error("IOException" ,e);
+				log.info(this.vivoClient.vivoUpdateApi(sb.toString()));
+			} catch(Exception e) {
+				log.error("API Exception" ,e);
 			}
-			
-			
-			this.jcf.returnConnectionToPool(vivoJena, "vitro-kb-inf");
-			
-				
 			
 		}
 		
@@ -1083,18 +1043,18 @@ public class GrantsFetchFromED {
 			
 			selectQuery.append("select distinct v.CWID,v.Account_Number,x.Award_Number,REPLACE(CONVERT(NVARCHAR, begin_date, 106), ' ', '-') as begin_date,REPLACE(CONVERT(NVARCHAR, end_date, 106), ' ', '-') as end_date,replace(replace(replace(z.proj_title,char(13),' '),char(10),' '),'	','') as proj_title, z.unit_name, z.int_unit_code, z.program_type,z.Orig_Sponsor,");
 			selectQuery.append("case when z.Sponsor = z.Orig_Sponsor then null when z.Sponsor != z.Orig_Sponsor then z.Sponsor end as Subward_Sponsor,");
-			selectQuery.append("z.spon_code,case when z.Sponsor = z.Orig_Sponsor and z.Primary_PI_Flag = 'Y' then 'PrincipalInvestigatorRole' when z.Sponsor != z.Orig_Sponsor and z.Primary_PI_Flag = 'Y' then 'PrincipalInvestigatorSubawardRole' when z.Role_Category = '1. PI' then 'CoPrincipalInvestigatorRole' when z.Role_Category = '2. Co-investigator' then 'CoInvestigatorRole' else 'KeyPersonnelRole' end as Role ");
+			selectQuery.append("z.spon_code,case when z.Sponsor = z.Orig_Sponsor and z.Primary_PI_Flag = 'Y' then 'PrincipalInvestigatorRole' when z.Sponsor != z.Orig_Sponsor and z.Primary_PI_Flag = 'Y' then 'PrincipalInvestigatorSubawardRole' when z.Role_Category = 'PI' then 'CoPrincipalInvestigatorRole' when z.Role_Category = 'Co-investigator' then 'CoInvestigatorRole' else 'KeyPersonnelRole' end as Role ");
 			selectQuery.append("from vivo v left join ");
 			selectQuery.append("(select distinct cwid, Account_Number, max(Award_Number) as Award_Number from vivo where program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL group by cwid, Account_Number) x ");
 			selectQuery.append("on x.cwid = v.cwid and x.Account_Number = v.Account_Number left join ");
 			selectQuery.append("(select distinct cwid, Account_Number, min(Project_Period_Start) as begin_date from vivo where program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL group by cwid, Account_Number) y ");
 			selectQuery.append("on y.cwid = v.cwid and y.Account_Number = v.Account_Number left join ");
-			selectQuery.append("(select distinct cwid, Account_Number, max(Project_Period_End) as end_date, max(Sponsor) as Sponsor, max(Orig_Sponsor) as Orig_Sponsor, max(spon_code) as spon_code, max(proj_title) as proj_title, min(program_type) as program_type, min(unit_name) as unit_name, min(int_unit_code) as int_unit_code, max(Primary_PI_Flag) as Primary_PI_Flag, min(role_category) as Role_Category from vivo  group by cwid, Account_Number) z ");
+			selectQuery.append("(select distinct cwid, Account_Number, max(Project_Period_End) as end_date, max(Sponsor) as Sponsor, max(Orig_Sponsor) as Orig_Sponsor, max(spon_code) as spon_code, max(proj_title) as proj_title, min(program_type) as program_type, min(unit_name) as unit_name, min(int_unit_code) as int_unit_code, max(Primary_PI_Flag) as Primary_PI_Flag, max(role_category) as Role_Category from vivo  group by cwid, Account_Number) z ");
 			selectQuery.append("on z.cwid = v.cwid and z.Account_Number = v.Account_Number ");
 			selectQuery.append("where v.cwid is not null and Confidential <> 'Y' and v.unit_name is not null and v.program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL ");
 			selectQuery.append("and v.cwid= '" + cwid + "' order by v.cwid, v.Account_Number");
 			
-			log.info(selectQuery.toString());
+			//log.info(selectQuery.toString());
 			
 			PreparedStatement ps = null;
 			java.sql.ResultSet rs = null;
@@ -1140,7 +1100,7 @@ public class GrantsFetchFromED {
 					if(rs.getString(12) != null)
 						gb.setSponsorCode(rs.getString(12).trim());
 					
-					gb.setContributors(getContributors(gb, gb.getAwardNumber()));
+					gb.setContributors(getContributors(gb, gb.getAwardNumber(), con));
 					
 
 					grant.add(gb);
@@ -1180,27 +1140,26 @@ public class GrantsFetchFromED {
 		 * @param cwid unique identifier for faculty
 		 * @return a map of contributors having cwid and contributor type
 		 */
-		private Map<String, String> getContributors(GrantBean gb, String accountNumber) {
-			Connection con = mcf.getConnectionfromPool("INFOED");
+		private Map<String, String> getContributors(GrantBean gb, String accountNumber, Connection con) {
 			Map<String, String> contributors = new HashMap<String, String>();
 			String contributor = null;
 			
 			StringBuilder selectQuery = new StringBuilder();
 			
-			selectQuery.append("select distinct v.CWID,v.Account_Number,x.Award_Number,begin_date,end_date,replace(replace(replace(z.proj_title,char(13),' '),char(10),' '),'	','') as proj_title, z.unit_name, z.int_unit_code, z.program_type,z.Orig_Sponsor,");
-			selectQuery.append("case when z.Sponsor = z.Orig_Sponsor then null when z.Sponsor != z.Orig_Sponsor then z.Sponsor end as Subward_Sponsor,");
-			selectQuery.append("z.spon_code,case when z.Sponsor = z.Orig_Sponsor and z.Primary_PI_Flag = 'Y' then 'PrincipalInvestigatorRole' when z.Sponsor != z.Orig_Sponsor and z.Primary_PI_Flag = 'Y' then 'PrincipalInvestigatorSubawardRole' when z.Role_Category = '1. PI' then 'CoPrincipalInvestigatorRole' when z.Role_Category = '2. Co-investigator' then 'CoInvestigatorRole' else 'KeyPersonnelRole' end as Role ");
-			selectQuery.append("from vivo v left join ");
-			selectQuery.append("(select distinct cwid, Account_Number, max(Award_Number) as Award_Number from vivo where program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL group by cwid, Account_Number) x ");
-			selectQuery.append("on x.cwid = v.cwid and x.Account_Number = v.Account_Number left join ");
-			selectQuery.append("(select distinct cwid, Account_Number, min(Project_Period_Start) as begin_date from vivo where program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL group by cwid, Account_Number) y ");
-			selectQuery.append("on y.cwid = v.cwid and y.Account_Number = v.Account_Number left join ");
-			selectQuery.append("(select distinct cwid, Account_Number, max(Project_Period_End) as end_date, max(Sponsor) as Sponsor, max(Orig_Sponsor) as Orig_Sponsor, max(spon_code) as spon_code, max(proj_title) as proj_title, min(program_type) as program_type, min(unit_name) as unit_name, min(int_unit_code) as int_unit_code, max(Primary_PI_Flag) as Primary_PI_Flag, min(role_category) as Role_Category from vivo  group by cwid, Account_Number) z ");
-			selectQuery.append("on z.cwid = v.cwid and z.Account_Number = v.Account_Number ");
-			selectQuery.append("where v.cwid is not null and Confidential <> 'Y' and v.unit_name is not null and v.program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL ");
+			selectQuery.append("select distinct v.CWID,v.Account_Number,x.Award_Number,begin_date,end_date,replace(replace(replace(z.proj_title,char(13),' '),char(10),' '),'	','') as proj_title, z.unit_name, z.int_unit_code, z.program_type,z.Orig_Sponsor, \n");
+			selectQuery.append("case when z.Sponsor = z.Orig_Sponsor then null when z.Sponsor != z.Orig_Sponsor then z.Sponsor end as Subward_Sponsor, \n");
+			selectQuery.append("z.spon_code,case when z.Sponsor = z.Orig_Sponsor and z.Primary_PI_Flag = 'Y' then 'PrincipalInvestigatorRole' when z.Sponsor != z.Orig_Sponsor and z.Primary_PI_Flag = 'Y' then 'PrincipalInvestigatorSubawardRole' when z.Role_Category = 'PI' then 'CoPrincipalInvestigatorRole' when z.Role_Category = 'Co-investigator' then 'CoInvestigatorRole' else 'KeyPersonnelRole' end as Role \n");
+			selectQuery.append("from vivo v left join \n");
+			selectQuery.append("(select distinct cwid, Account_Number, max(Award_Number) as Award_Number from vivo where program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL group by cwid, Account_Number) x \n");
+			selectQuery.append("on x.cwid = v.cwid and x.Account_Number = v.Account_Number left join \n");
+			selectQuery.append("(select distinct cwid, Account_Number, min(Project_Period_Start) as begin_date from vivo where program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL group by cwid, Account_Number) y \n");
+			selectQuery.append("on y.cwid = v.cwid and y.Account_Number = v.Account_Number left join \n");
+			selectQuery.append("(select distinct cwid, Account_Number, max(Project_Period_End) as end_date, max(Sponsor) as Sponsor, max(Orig_Sponsor) as Orig_Sponsor, max(spon_code) as spon_code, max(proj_title) as proj_title, min(program_type) as program_type, min(unit_name) as unit_name, min(int_unit_code) as int_unit_code, max(Primary_PI_Flag) as Primary_PI_Flag, max(role_category) as Role_Category from vivo  group by cwid, Account_Number) z \n");
+			selectQuery.append("on z.cwid = v.cwid and z.Account_Number = v.Account_Number \n");
+			selectQuery.append("where v.cwid is not null and Confidential <> 'Y' and v.unit_name is not null and v.program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL \n");
 			selectQuery.append("and v.Account_Number= '" + accountNumber + "' order by v.cwid, v.Account_Number");
 
-			//log.info(selectQuery);
+			//log.info(selectQuery.toString());
 			PreparedStatement ps = null;
 			java.sql.ResultSet rs = null;
 			try {
@@ -1226,8 +1185,6 @@ public class GrantsFetchFromED {
 						ps.close();
 					if(rs!=null)
 						rs.close();
-					if(con != null)
-						mcf.returnConnectionToPool("INFOED", con);
 				}
 				catch(Exception e) {
 					log.error("Exception",e);
@@ -1314,6 +1271,5 @@ public class GrantsFetchFromED {
 			return deptId;
 					
 		}
-		
 		
 }

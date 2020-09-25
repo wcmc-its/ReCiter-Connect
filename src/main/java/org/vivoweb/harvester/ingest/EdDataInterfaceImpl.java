@@ -36,9 +36,9 @@ public class EdDataInterfaceImpl implements EdDataInterface {
 				"WHERE \n" +
 				"{ \n" +
 				"?people rdf:type foaf:Person . \n" +
-				//"FILTER(REGEX(STR(?people),\"rak2007\")) \n" +
+				"FILTER(REGEX(STR(?people),\"ccole\")) \n" +
 				"}";
-
+		log.info(sparqlQuery);
 		try {
 			String response = vivoClient.vivoQueryApi(sparqlQuery);
 			log.info(response);
@@ -46,7 +46,7 @@ public class EdDataInterfaceImpl implements EdDataInterface {
 			JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
 			if(bindings != null && !bindings.isEmpty()) {
 				for (int i = 0; i < bindings.length(); ++i) {
-					people.add(bindings.getJSONObject(i).getJSONObject("people").getString("value").replace("http://vivo.med.cornell.edu/individual/cwid-", ""));
+					people.add(bindings.getJSONObject(i).getJSONObject("people").getString("value").replace("https://vivo.med.cornell.edu/individual/cwid-", ""));
 				}
 			} else {
 				log.info("No result from the query");

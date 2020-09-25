@@ -24,7 +24,9 @@ import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.vivoweb.harvester.ingest.AcademicFetchFromED;
+import org.vivoweb.harvester.ingest.AppointmentsFetchFromED;
 import org.vivoweb.harvester.ingest.EdDataInterface;
+import org.vivoweb.harvester.ingest.GrantsFetchFromED;
 
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -106,12 +108,18 @@ public class Application implements ApplicationRunner {
         JenaConnectionFactory jenaConnectionFactory = context.getBean(JenaConnectionFactory.class);
         SDBQueryInterface sdbQueryInterface = context.getBean(SDBQueryInterface.class);
         AcademicFetchFromED academicFetchFromED = context.getBean(AcademicFetchFromED.class);
+        GrantsFetchFromED grantsFetchFromED = context.getBean(GrantsFetchFromED.class);
+        AppointmentsFetchFromED appointmentsFetchFromED = context.getBean(AppointmentsFetchFromED.class);
 
 
         try {
-            academicFetchFromED.execute();
-        } catch (IOException e) {
-            log.error("IOException", e);
+            //academicFetchFromED.execute();
+            appointmentsFetchFromED.execute();
+            grantsFetchFromED.execute();
+            
+
+        } catch (Exception e) {
+            log.error("Exception", e);
         }
 
         /*ReCiterClient reCiterClient = context.getBean(ReCiterClient.class);
