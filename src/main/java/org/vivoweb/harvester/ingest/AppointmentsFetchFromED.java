@@ -750,7 +750,7 @@ public class AppointmentsFetchFromED {
 			for(RoleBean role: rb) {
 				StringBuffer sb = new StringBuffer();
 				sb.append("SELECT ?obj \n");
-				sb.append("FROM 	 \n");
+				sb.append("FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");
 				sb.append("WHERE {\n");
 				sb.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> <http://vivoweb.org/ontology/core#dateTimeInterval> ?obj . \n");
 				sb.append("}");
@@ -1306,11 +1306,11 @@ public class AppointmentsFetchFromED {
 			int count = 0;
 			StringBuffer sb = new StringBuffer();
 			sb.append("SELECT  (count(?o) as ?positionCount) \n");
-			sb.append("FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");  // While using COUNT - FROM keyword does not work with SDBJenaConnect
 			sb.append("WHERE \n");
 			sb.append("{ \n");
+			sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> { \n");
 			sb.append("<" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> ?p ?o . \n");
-			sb.append("}");
+			sb.append("}}");
 			
 			try {
 				String response = this.vivoClient.vivoQueryApi(sb.toString());

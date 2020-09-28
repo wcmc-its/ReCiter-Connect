@@ -179,6 +179,7 @@ public class GrantsFetchFromED {
 			String endDate = null;
 			DateFormat shortFormat = new SimpleDateFormat("yyyy-MM-dd",Locale.ENGLISH);
 			DateFormat mediumFormat = new SimpleDateFormat("dd-MMM-yy",Locale.ENGLISH);
+			DateFormat yearFormat = new SimpleDateFormat("yyyy",Locale.ENGLISH);
 			//get contributor list & date interval for that grant from VIVO
 			StringBuilder sb = new StringBuilder();
 			sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
@@ -303,6 +304,40 @@ public class GrantsFetchFromED {
 							sb.append("<" + this.vivoNamespace + "role-pi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
 							sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + contributor.trim() + "> . \n");
 							sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "role-pi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
+							beginDate = gb.getBeginDate().trim();
+							endDate = gb.getEndDate().trim();
+							try {
+								if(!beginDate.equals(""))
+									beginDate = yearFormat.format(mediumFormat.parse(beginDate));
+								if(!endDate.equals(""))
+									endDate = yearFormat.format(mediumFormat.parse(endDate));
+							} catch(ParseException e) {
+								log.error("ParseException", e);
+							}
+							//Date Time Interval
+							sb.append("<" + this.vivoNamespace + "role-pi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-role-pi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-pi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
+							if(!gb.getBeginDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-pi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-role" + beginDate.trim() + "> . \n");
+							
+							if(!gb.getEndDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-pi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-role" + endDate.trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-pi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							
+							//Start Date Section
+							if(!gb.getBeginDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTime \"" + beginDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
+							//End Date Section
+							if(!gb.getEndDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTime \"" + endDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
 						}
 						else if(ctype.equals("KeyPersonnelRole")) {
 							if(cwid.equals(contributor))
@@ -314,6 +349,40 @@ public class GrantsFetchFromED {
 							sb.append("<" + this.vivoNamespace + "role-kp-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
 							sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + contributor.trim() + "> . \n");
 							sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "role-kp-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
+							beginDate = gb.getBeginDate().trim();
+							endDate = gb.getEndDate().trim();
+							try {
+								if(!beginDate.equals(""))
+									beginDate = yearFormat.format(mediumFormat.parse(beginDate));
+								if(!endDate.equals(""))
+									endDate = yearFormat.format(mediumFormat.parse(endDate));
+							} catch(ParseException e) {
+								log.error("ParseException", e);
+							}
+							//Date Time Interval
+							sb.append("<" + this.vivoNamespace + "role-kp-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-role-kp-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-kp-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
+							if(!gb.getBeginDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-kp-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-role" + beginDate.trim() + "> . \n");
+							
+							if(!gb.getEndDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-kp-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-role" + endDate.trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-kp-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							
+							//Start Date Section
+							if(!gb.getBeginDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTime \"" + beginDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
+							//End Date Section
+							if(!gb.getEndDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTime \"" + endDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
 						}
 						else if(ctype.equals("PrincipalInvestigatorSubawardRole")) {
 							if(cwid.equals(contributor))
@@ -325,6 +394,40 @@ public class GrantsFetchFromED {
 							sb.append("<" + this.vivoNamespace + "role-pisa-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
 							sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + contributor.trim() + "> . \n");
 							sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "role-pisa-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
+							beginDate = gb.getBeginDate().trim();
+							endDate = gb.getEndDate().trim();
+							try {
+								if(!beginDate.equals(""))
+									beginDate = yearFormat.format(mediumFormat.parse(beginDate));
+								if(!endDate.equals(""))
+									endDate = yearFormat.format(mediumFormat.parse(endDate));
+							} catch(ParseException e) {
+								log.error("ParseException", e);
+							}
+							//Date Time Interval
+							sb.append("<" + this.vivoNamespace + "role-pisa-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-role-pisa-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-pisa-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
+							if(!gb.getBeginDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-pisa-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-role" + beginDate.trim() + "> . \n");
+							
+							if(!gb.getEndDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-pisa-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-role" + endDate.trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-pisa-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							
+							//Start Date Section
+							if(!gb.getBeginDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTime \"" + beginDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
+							//End Date Section
+							if(!gb.getEndDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTime \"" + endDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
 						}
 						else if(ctype.equals("CoPrincipalInvestigatorRole")) {
 							if(cwid.equals(contributor))
@@ -336,6 +439,40 @@ public class GrantsFetchFromED {
 							sb.append("<" + this.vivoNamespace + "role-copi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
 							sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + contributor.trim() + "> . \n");
 							sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "role-copi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
+							beginDate = gb.getBeginDate().trim();
+							endDate = gb.getEndDate().trim();
+							try {
+								if(!beginDate.equals(""))
+									beginDate = yearFormat.format(mediumFormat.parse(beginDate));
+								if(!endDate.equals(""))
+									endDate = yearFormat.format(mediumFormat.parse(endDate));
+							} catch(ParseException e) {
+								log.error("ParseException", e);
+							}
+							//Date Time Interval
+							sb.append("<" + this.vivoNamespace + "role-copi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-role-copi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-copi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
+							if(!gb.getBeginDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-copi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-role" + beginDate.trim() + "> . \n");
+							
+							if(!gb.getEndDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-copi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-role" + endDate.trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-copi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							
+							//Start Date Section
+							if(!gb.getBeginDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTime \"" + beginDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
+							//End Date Section
+							if(!gb.getEndDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTime \"" + endDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
 						}
 						else if(ctype.equals("CoInvestigatorRole")) {
 							if(cwid.equals(contributor))
@@ -347,6 +484,40 @@ public class GrantsFetchFromED {
 							sb.append("<" + this.vivoNamespace + "role-coi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
 							sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + contributor.trim() + "> . \n");
 							sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "role-coi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
+							beginDate = gb.getBeginDate().trim();
+							endDate = gb.getEndDate().trim();
+							try {
+								if(!beginDate.equals(""))
+									beginDate = yearFormat.format(mediumFormat.parse(beginDate));
+								if(!endDate.equals(""))
+									endDate = yearFormat.format(mediumFormat.parse(endDate));
+							} catch(ParseException e) {
+								log.error("ParseException", e);
+							}
+							//Date Time Interval
+							sb.append("<" + this.vivoNamespace + "role-coi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-role-coi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-coi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
+							if(!gb.getBeginDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-coi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-role" + beginDate.trim() + "> . \n");
+							
+							if(!gb.getEndDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-coi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-role" + endDate.trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-coi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							
+							//Start Date Section
+							if(!gb.getBeginDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTime \"" + beginDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
+							//End Date Section
+							if(!gb.getEndDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTime \"" + endDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
 						}
 					}
 					if(!dateTimeIntervalFlag && !newContributors.isEmpty())
@@ -729,6 +900,7 @@ public class GrantsFetchFromED {
 			String endDate = null;
 			DateFormat shortFormat = new SimpleDateFormat("yyyy-MM-dd",Locale.ENGLISH);
 			DateFormat mediumFormat = new SimpleDateFormat("dd-MMM-yy",Locale.ENGLISH);
+			DateFormat yearFormat = new SimpleDateFormat("yyyy",Locale.ENGLISH);
 			String contributor = null;
 			String ctype = null;
 			StringBuilder sb = new StringBuilder();
@@ -760,6 +932,44 @@ public class GrantsFetchFromED {
 						sb.append("<" + this.vivoNamespace + "role-pi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
 						sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + contributor.trim() + "> . \n");
 						sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "role-pi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
+
+						//Date Time Interval Section
+						beginDate = gb.getBeginDate().trim();
+						endDate = gb.getEndDate().trim();
+						try {
+							if(!beginDate.equals(""))
+								beginDate = yearFormat.format(mediumFormat.parse(beginDate));
+							if(!endDate.equals(""))
+								endDate = yearFormat.format(mediumFormat.parse(endDate));
+						} catch(ParseException e) {
+							log.error("ParseException", e);
+						}
+						//Date Time Interval
+						sb.append("<" + this.vivoNamespace + "role-pi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-role-pi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> . \n");
+						sb.append("<" + this.vivoNamespace + "dtinterval-role-pi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
+						if(!gb.getBeginDate().equals(""))
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-pi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-role" + beginDate.trim() + "> . \n");
+						
+						if(!gb.getEndDate().equals(""))
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-pi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-role" + endDate.trim() + "> . \n");
+						sb.append("<" + this.vivoNamespace + "dtinterval-role-pi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+						
+						//Start Date Section
+						if(!gb.getBeginDate().equals("")) {
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> rdf:type core:DateTimeValue . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTime \"" + beginDate.trim() + "-01-01T00:00:00\" . \n" );
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+						}
+						//End Date Section
+						if(!gb.getEndDate().equals("")) {
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> rdf:type core:DateTimeValue . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTime \"" + endDate.trim() + "-01-01T00:00:00\" . \n" );
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+						}
+
+
 					}
 					else if(ctype.equals("KeyPersonnelRole")) {
 						if(cwid.equals(contributor))
@@ -771,6 +981,41 @@ public class GrantsFetchFromED {
 						sb.append("<" + this.vivoNamespace + "role-kp-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
 						sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + contributor.trim() + "> . \n");
 						sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "role-kp-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
+						//Date Time Interval Section
+						beginDate = gb.getBeginDate().trim();
+						endDate = gb.getEndDate().trim();
+						try {
+							if(!beginDate.equals(""))
+								beginDate = yearFormat.format(mediumFormat.parse(beginDate));
+							if(!endDate.equals(""))
+								endDate = yearFormat.format(mediumFormat.parse(endDate));
+						} catch(ParseException e) {
+							log.error("ParseException", e);
+						}
+						//Date Time Interval
+						sb.append("<" + this.vivoNamespace + "role-kp-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-role-kp-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> . \n");
+						sb.append("<" + this.vivoNamespace + "dtinterval-role-kp-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
+						if(!gb.getBeginDate().equals(""))
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-kp-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-role" + beginDate.trim() + "> . \n");
+						
+						if(!gb.getEndDate().equals(""))
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-kp-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-role" + endDate.trim() + "> . \n");
+						sb.append("<" + this.vivoNamespace + "dtinterval-role-kp-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+						
+						//Start Date Section
+						if(!gb.getBeginDate().equals("")) {
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> rdf:type core:DateTimeValue . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTime \"" + beginDate.trim() + "-01-01T00:00:00\" . \n" );
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+						}
+						//End Date Section
+						if(!gb.getEndDate().equals("")) {
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> rdf:type core:DateTimeValue . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTime \"" + endDate.trim() + "-01-01T00:00:00\" . \n" );
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+						}
 					}
 					else if(ctype.equals("PrincipalInvestigatorSubawardRole")) {
 						if(cwid.equals(contributor))
@@ -782,6 +1027,41 @@ public class GrantsFetchFromED {
 						sb.append("<" + this.vivoNamespace + "role-pisa-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
 						sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + contributor.trim() + "> . \n");
 						sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "role-pisa-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
+						//Date Time Interval Section
+						beginDate = gb.getBeginDate().trim();
+						endDate = gb.getEndDate().trim();
+						try {
+							if(!beginDate.equals(""))
+								beginDate = yearFormat.format(mediumFormat.parse(beginDate));
+							if(!endDate.equals(""))
+								endDate = yearFormat.format(mediumFormat.parse(endDate));
+						} catch(ParseException e) {
+							log.error("ParseException", e);
+						}
+						//Date Time Interval
+						sb.append("<" + this.vivoNamespace + "role-pisa-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-role-pisa-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> . \n");
+						sb.append("<" + this.vivoNamespace + "dtinterval-role-pisa-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
+						if(!gb.getBeginDate().equals(""))
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-pisa-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-role" + beginDate.trim() + "> . \n");
+						
+						if(!gb.getEndDate().equals(""))
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-pisa-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-role" + endDate.trim() + "> . \n");
+						sb.append("<" + this.vivoNamespace + "dtinterval-role-pisa-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+						
+						//Start Date Section
+						if(!gb.getBeginDate().equals("")) {
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> rdf:type core:DateTimeValue . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTime \"" + beginDate.trim() + "-01-01T00:00:00\" . \n" );
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+						}
+						//End Date Section
+						if(!gb.getEndDate().equals("")) {
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> rdf:type core:DateTimeValue . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTime \"" + endDate.trim() + "-01-01T00:00:00\" . \n" );
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+						}
 					}
 					else if(ctype.equals("CoPrincipalInvestigatorRole")) {
 						if(cwid.equals(contributor))
@@ -793,6 +1073,41 @@ public class GrantsFetchFromED {
 						sb.append("<" + this.vivoNamespace + "role-copi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
 						sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + contributor.trim() + "> . \n");
 						sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "role-copi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
+						//Date Time Interval Section
+						beginDate = gb.getBeginDate().trim();
+						endDate = gb.getEndDate().trim();
+						try {
+							if(!beginDate.equals(""))
+								beginDate = yearFormat.format(mediumFormat.parse(beginDate));
+							if(!endDate.equals(""))
+								endDate = yearFormat.format(mediumFormat.parse(endDate));
+						} catch(ParseException e) {
+							log.error("ParseException", e);
+						}
+						//Date Time Interval
+						sb.append("<" + this.vivoNamespace + "role-copi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-role-copi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> . \n");
+						sb.append("<" + this.vivoNamespace + "dtinterval-role-copi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
+						if(!gb.getBeginDate().equals(""))
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-copi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-role" + beginDate.trim() + "> . \n");
+						
+						if(!gb.getEndDate().equals(""))
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-copi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-role" + endDate.trim() + "> . \n");
+						sb.append("<" + this.vivoNamespace + "dtinterval-role-copi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+						
+						//Start Date Section
+						if(!gb.getBeginDate().equals("")) {
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> rdf:type core:DateTimeValue . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTime \"" + beginDate.trim() + "-01-01T00:00:00\" . \n" );
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+						}
+						//End Date Section
+						if(!gb.getEndDate().equals("")) {
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> rdf:type core:DateTimeValue . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTime \"" + endDate.trim() + "-01-01T00:00:00\" . \n" );
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+						}
 					}
 					else if(ctype.equals("CoInvestigatorRole")) {
 						if(cwid.equals(contributor))
@@ -804,6 +1119,41 @@ public class GrantsFetchFromED {
 						sb.append("<" + this.vivoNamespace + "role-coi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
 						sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + contributor.trim() + "> . \n");
 						sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "role-coi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
+						//Date Time Interval Section
+						beginDate = gb.getBeginDate().trim();
+						endDate = gb.getEndDate().trim();
+						try {
+							if(!beginDate.equals(""))
+								beginDate = yearFormat.format(mediumFormat.parse(beginDate));
+							if(!endDate.equals(""))
+								endDate = yearFormat.format(mediumFormat.parse(endDate));
+						} catch(ParseException e) {
+							log.error("ParseException", e);
+						}
+						//Date Time Interval
+						sb.append("<" + this.vivoNamespace + "role-coi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-role-coi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> . \n");
+						sb.append("<" + this.vivoNamespace + "dtinterval-role-coi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
+						if(!gb.getBeginDate().equals(""))
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-coi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-role" + beginDate.trim() + "> . \n");
+						
+						if(!gb.getEndDate().equals(""))
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-coi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-role" + endDate.trim() + "> . \n");
+						sb.append("<" + this.vivoNamespace + "dtinterval-role-coi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+						
+						//Start Date Section
+						if(!gb.getBeginDate().equals("")) {
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> rdf:type core:DateTimeValue . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTime \"" + beginDate.trim() + "-01-01T00:00:00\" . \n" );
+							sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+						}
+						//End Date Section
+						if(!gb.getEndDate().equals("")) {
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> rdf:type core:DateTimeValue . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTime \"" + endDate.trim() + "-01-01T00:00:00\" . \n" );
+							sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+						}
 					}
 					//Add all other contributors
 					if(!cwid.equals(contributor)) {
@@ -814,22 +1164,197 @@ public class GrantsFetchFromED {
 						if(ctype.equals("PrincipalInvestigatorRole")) {
 							sb.append("<" + this.vivoNamespace + "cwid-" + contributor.trim() + "> obo:RO_0000053 <" + this.vivoNamespace + "role-pi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
 							sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "role-pi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
+							//Date Time Interval Section
+							beginDate = gb.getBeginDate().trim();
+							endDate = gb.getEndDate().trim();
+							try {
+								if(!beginDate.equals(""))
+									beginDate = yearFormat.format(mediumFormat.parse(beginDate));
+								if(!endDate.equals(""))
+									endDate = yearFormat.format(mediumFormat.parse(endDate));
+							} catch(ParseException e) {
+								log.error("ParseException", e);
+							}
+							//Date Time Interval
+							sb.append("<" + this.vivoNamespace + "role-pi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-role-pi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-pi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
+							if(!gb.getBeginDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-pi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-role" + beginDate.trim() + "> . \n");
+							
+							if(!gb.getEndDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-pi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-role" + endDate.trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-pi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							
+							//Start Date Section
+							if(!gb.getBeginDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTime \"" + beginDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
+							//End Date Section
+							if(!gb.getEndDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTime \"" + endDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
 						}
 						else if(ctype.equals("KeyPersonnelRole")) {
 							sb.append("<" + this.vivoNamespace + "cwid-" + contributor.trim() + "> obo:RO_0000053 <" + this.vivoNamespace + "role-kp-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
 							sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "role-kp-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
+							//Date Time Interval Section
+							beginDate = gb.getBeginDate().trim();
+							endDate = gb.getEndDate().trim();
+							try {
+								if(!beginDate.equals(""))
+									beginDate = yearFormat.format(mediumFormat.parse(beginDate));
+								if(!endDate.equals(""))
+									endDate = yearFormat.format(mediumFormat.parse(endDate));
+							} catch(ParseException e) {
+								log.error("ParseException", e);
+							}
+							//Date Time Interval
+							sb.append("<" + this.vivoNamespace + "role-kp-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-role-kp-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-kp-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
+							if(!gb.getBeginDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-kp-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-role" + beginDate.trim() + "> . \n");
+							
+							if(!gb.getEndDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-kp-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-role" + endDate.trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-kp-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							
+							//Start Date Section
+							if(!gb.getBeginDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTime \"" + beginDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
+							//End Date Section
+							if(!gb.getEndDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTime \"" + endDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
 						}
 						else if(ctype.equals("PrincipalInvestigatorSubawardRole")) {
 							sb.append("<" + this.vivoNamespace + "cwid-" + contributor.trim() + "> obo:RO_0000053 <" + this.vivoNamespace + "role-pisa-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
 							sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "role-pisa-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
+							//Date Time Interval Section
+							beginDate = gb.getBeginDate().trim();
+							endDate = gb.getEndDate().trim();
+							try {
+								if(!beginDate.equals(""))
+									beginDate = yearFormat.format(mediumFormat.parse(beginDate));
+								if(!endDate.equals(""))
+									endDate = yearFormat.format(mediumFormat.parse(endDate));
+							} catch(ParseException e) {
+								log.error("ParseException", e);
+							}
+							//Date Time Interval
+							sb.append("<" + this.vivoNamespace + "role-pisa-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-role-pisa-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-pisa-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
+							if(!gb.getBeginDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-pisa-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-role" + beginDate.trim() + "> . \n");
+							
+							if(!gb.getEndDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-pisa-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-role" + endDate.trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-pisa-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							
+							//Start Date Section
+							if(!gb.getBeginDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTime \"" + beginDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
+							//End Date Section
+							if(!gb.getEndDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTime \"" + endDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
 						}
 						else if(ctype.equals("CoPrincipalInvestigatorRole")) {
 							sb.append("<" + this.vivoNamespace + "cwid-" + contributor.trim() + "> obo:RO_0000053 <" + this.vivoNamespace + "role-copi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
 							sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "role-copi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
+							//Date Time Interval Section
+							beginDate = gb.getBeginDate().trim();
+							endDate = gb.getEndDate().trim();
+							try {
+								if(!beginDate.equals(""))
+									beginDate = yearFormat.format(mediumFormat.parse(beginDate));
+								if(!endDate.equals(""))
+									endDate = yearFormat.format(mediumFormat.parse(endDate));
+							} catch(ParseException e) {
+								log.error("ParseException", e);
+							}
+							//Date Time Interval
+							sb.append("<" + this.vivoNamespace + "role-copi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-role-copi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-copi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
+							if(!gb.getBeginDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-copi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-role" + beginDate.trim() + "> . \n");
+							
+							if(!gb.getEndDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-copi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-role" + endDate.trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-copi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							
+							//Start Date Section
+							if(!gb.getBeginDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTime \"" + beginDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
+							//End Date Section
+							if(!gb.getEndDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTime \"" + endDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
 						}
 						else if(ctype.equals("CoInvestigatorRole")) {
 							sb.append("<" + this.vivoNamespace + "cwid-" + contributor.trim() + "> obo:RO_0000053 <" + this.vivoNamespace + "role-coi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
 							sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "role-coi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> . \n");
+							//Date Time Interval Section
+							beginDate = gb.getBeginDate().trim();
+							endDate = gb.getEndDate().trim();
+							try {
+								if(!beginDate.equals(""))
+									beginDate = yearFormat.format(mediumFormat.parse(beginDate));
+								if(!endDate.equals(""))
+									endDate = yearFormat.format(mediumFormat.parse(endDate));
+							} catch(ParseException e) {
+								log.error("ParseException", e);
+							}
+							//Date Time Interval
+							sb.append("<" + this.vivoNamespace + "role-coi-" + gb.getAwardNumber().trim() + "-" + contributor.trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-role-coi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-coi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
+							if(!gb.getBeginDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-coi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-role" + beginDate.trim() + "> . \n");
+							
+							if(!gb.getEndDate().equals(""))
+								sb.append("<" + this.vivoNamespace + "dtinterval-role-coi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-role" + endDate.trim() + "> . \n");
+							sb.append("<" + this.vivoNamespace + "dtinterval-role-coi-" + gb.getBeginDate().trim() + "to" + gb.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							
+							//Start Date Section
+							if(!gb.getBeginDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> core:dateTime \"" + beginDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + beginDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
+							//End Date Section
+							if(!gb.getEndDate().equals("")) {
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> rdf:type core:DateTimeValue . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> core:dateTime \"" + endDate.trim() + "-01-01T00:00:00\" . \n" );
+								sb.append("<" + this.vivoNamespace + "date-role" + endDate.trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
 						}
 					}
 						
@@ -853,9 +1378,11 @@ public class GrantsFetchFromED {
 				sb.append("<" + this.vivoNamespace + "administrator-role-" + gb.getAwardNumber().trim() + "> obo:RO_0000052 <" + this.vivoNamespace + "org-u" + gb.getDepartment() + "> . \n");
 				sb.append("<" + this.vivoNamespace + "administrator-role-" + gb.getAwardNumber().trim() + "> core:relatedBy <" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> . \n");
 				sb.append("<" + this.vivoNamespace + "administrator-role-" + gb.getAwardNumber().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+				sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "administrator-role-" + gb.getAwardNumber().trim() + "> . \n");
 				sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates <" + this.vivoNamespace + "org-u" + gb.getDepartment() + "> . \n");
 				sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:assignedBy <" + this.vivoNamespace + "org-f" + gb.getSponsorCode() + "> . \n");
 				sb.append("<" + this.vivoNamespace + "org-f" + gb.getSponsorCode() + "> rdf:type core:FundingOrganization . \n");
+				sb.append("<" + this.vivoNamespace + "org-f" + gb.getSponsorCode() + "> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
 				sb.append("<" + this.vivoNamespace + "org-f" + gb.getSponsorCode() + "> rdfs:label \"" + gb.getSponsorName().trim() + "\" . \n");
 				sb.append("<" + this.vivoNamespace + "org-f" + gb.getSponsorCode() + "> vitro:mostSpecificType core:FundingOrganization . \n");
 				sb.append("<" + this.vivoNamespace + "org-f" + gb.getSponsorCode() + "> core:assigns <" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> . \n");
