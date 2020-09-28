@@ -113,7 +113,7 @@ public class Application implements ApplicationRunner {
 
 
         try {
-            //academicFetchFromED.execute();
+            academicFetchFromED.execute();
             appointmentsFetchFromED.execute();
             grantsFetchFromED.execute();
             

@@ -36,9 +36,9 @@ public class EdDataInterfaceImpl implements EdDataInterface {
 				"WHERE \n" +
 				"{ \n" +
 				"?people rdf:type foaf:Person . \n" +
-				"FILTER(REGEX(STR(?people),\"ccole\")) \n" +
+				//"FILTER(REGEX(STR(?people),\"ccole\")) \n" +
 				"}";
-		log.info(sparqlQuery);
+		
 		try {
 			String response = vivoClient.vivoQueryApi(sparqlQuery);
 			log.info(response);
