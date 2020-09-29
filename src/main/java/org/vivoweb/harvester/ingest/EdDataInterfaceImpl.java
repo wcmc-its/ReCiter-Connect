@@ -7,7 +7,6 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.vivoweb.harvester.util.repo.SDBJenaConnect;
 
 import lombok.extern.slf4j.Slf4j;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
@@ -36,7 +35,7 @@ public class EdDataInterfaceImpl implements EdDataInterface {
 				"WHERE \n" +
 				"{ \n" +
 				"?people rdf:type foaf:Person . \n" +
-				//"FILTER(REGEX(STR(?people),\"ccole\")) \n" +
+				//"FILTER(REGEX(STR(?people),\"bhb9002\")) \n" +
 				"}";
 		
 		try {

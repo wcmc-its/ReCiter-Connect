@@ -62,7 +62,10 @@ public class JenaConnectionFactory {
         this.dbLayout = dbLayout;
 		this.dbDriver = dbDriver;
 		this.nameSpaceProp = namespace;
-		initialize();
+		//initialize();
+		if(nameSpaceProp != null && nameSpaceProp.trim().length() != 0) {
+			JenaConnectionFactory.nameSpace=(nameSpaceProp.trim().endsWith("/"))?nameSpaceProp.trim():nameSpaceProp.trim().concat("/");
+        }
 	}
 	
 	/**

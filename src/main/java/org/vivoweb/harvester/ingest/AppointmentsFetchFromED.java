@@ -10,6 +10,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.jena.query.QuerySolution;
@@ -86,21 +88,29 @@ public class AppointmentsFetchFromED {
 	private String strDate = sdf.format(now);
 	
 	private String currYear = new SimpleDateFormat("yyyy").format(now);
+
+	public Callable<String> getCallable(List<String> people) {
+        return new Callable<String>() {
+            public String call() throws Exception {
+                return execute(people);
+            }
+        };
+    }
 		
 		/**
 		 * This is the main execution method of the class
 		 * @throws IOException when connecting to ED
 		 */
-	public void execute() throws IOException {
+	public String execute(List<String> people) throws IOException {
 		
 		int insertCount = 0;
 		int updateCount = 0;
 		//Initialize connection pool and fill it with connection
-		this.con = this.mcf.getConnectionfromPool("ASMS");
+		this.con = this.mcf.getAsmsConnectionfromPool("ASMS");
 		
 		OfaBean ob1 = new OfaBean();
 		
-		this.people = this.edi.getPeopleInVivo(this.jcf); //Get all the faculty in VIVO
+		this.people = people;//this.edi.getPeopleInVivo(this.jcf); //Get all the faculty in VIVO
 		
 		Iterator<String> it = this.people.iterator();
 		while(it.hasNext()) {
@@ -136,10 +146,8 @@ public class AppointmentsFetchFromED {
 		log.info("New appointments fetched for " + insertCount + " people");
 		log.info("Appointments updated for " + updateCount + " people");
 		log.info("Appointments fetch completed successfully...");
-		
-		//Destroy jena connection pool
-		if(this.jcf != null)
-			this.jcf.destroyConnectionPool();
+
+		return "People fetch completed successfully";
 	}
 		
 		/**

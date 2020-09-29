@@ -1,11 +1,20 @@
 package reciter.connect.main;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 import javax.annotation.PostConstruct;
 import javax.net.ssl.SSLException;
+
+import com.google.common.collect.Lists;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -111,11 +120,36 @@ public class Application implements ApplicationRunner {
         GrantsFetchFromED grantsFetchFromED = context.getBean(GrantsFetchFromED.class);
         AppointmentsFetchFromED appointmentsFetchFromED = context.getBean(AppointmentsFetchFromED.class);
 
+        ExecutorService executor = Executors.newWorkStealingPool();
 
         try {
-            academicFetchFromED.execute();
-            appointmentsFetchFromED.execute();
-            grantsFetchFromED.execute();
+            //academicFetchFromED.execute();
+            List<String> people = edDataInterface.getPeopleInVivo(jenaConnectionFactory);
+            List<List<String>> peopleSubSets = Lists.partition(people, 10);
+            Iterator<List<String>> subSetsIteratorPeople = peopleSubSets.iterator();
+		    while (subSetsIteratorPeople.hasNext()) {
+                List<String> subsetPeoples = subSetsIteratorPeople.next();
+                List<Callable<String>> callables = new ArrayList<>();
+                for(String peopleSubset: subsetPeoples) {
+                    callables.add(appointmentsFetchFromED.getCallable(Arrays.asList(peopleSubset)));
+                    callables.add(grantsFetchFromED.getCallable(Arrays.asList(peopleSubset)));
+                }
+                try {
+                    executor.invokeAll(callables)
+                    .stream()
+                    .map(future -> {
+                        try {
+                            return future.get();
+                        }
+                        catch (Exception e) {
+                            throw new IllegalStateException(e);
+                        }
+                    }).forEach(System.out::println);
+                } catch (InterruptedException e) {
+                    log.error("Unable to invoke callable.", e);
+                }
+                callables.clear();
+            }
             
 
         } catch (Exception e) {
@@ -149,6 +183,14 @@ public class Application implements ApplicationRunner {
         if (jenaConnectionFactory != null)
             jenaConnectionFactory.destroyConnectionPool();
     }
+
+    public static <T> CompletableFuture<List<T>> allOf(List<CompletableFuture<T>> futuresList) {
+	    CompletableFuture<Void> allFuturesResult =
+	    	    CompletableFuture.allOf(futuresList.toArray(new CompletableFuture[futuresList.size()]));
+	    	    return allFuturesResult.thenApply(v ->
+	    	    	futuresList.stream().map(CompletableFuture::join).collect(Collectors.toList())
+	    	    );
+	 }
 }
 
 

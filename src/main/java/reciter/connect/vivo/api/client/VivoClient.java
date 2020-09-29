@@ -1,15 +1,10 @@
 package reciter.connect.vivo.api.client;
 
-import java.nio.charset.Charset;
-import java.time.Duration;
-import java.util.List;
-
 import javax.net.ssl.SSLException;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Service;
-import org.springframework.util.Base64Utils;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
@@ -31,6 +26,7 @@ public class VivoClient {
 
     private final String vivoApiUsername = System.getenv("VIVO_API_USERNAME");
     private final String vivoApiPassword = System.getenv("VIVO_API_PASSWORD");
+    private final String vivoBaseUrl = System.getenv("VIVO_BASE_URL");
 
     public VivoClient(WebClient.Builder webClientBuilder) {
         try {
@@ -40,7 +36,7 @@ public class VivoClient {
             this.webClient = webClientBuilder
                     .clientConnector(new ReactorClientHttpConnector(httpClient))
                     .filter(VivoClient.errorHandlingFilter())
-                    .baseUrl("https://vivo-dev.weill.cornell.edu")
+                    .baseUrl(this.vivoBaseUrl)
                     .build();
         } catch (SSLException e) {
             log.error("SSLException", e);

@@ -17,6 +17,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.Map.Entry;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+
 import org.apache.commons.lang.StringEscapeUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -89,17 +92,25 @@ public class GrantsFetchFromED {
 	 * This sets todays date for harvested date
 	 */
 	private String strDate = this.sdf.format(this.now);
+
+	public Callable<String> getCallable(List<String> people) {
+        return new Callable<String>() {
+            public String call() throws Exception {
+                return execute(people);
+            }
+        };
+    }
 		
 		/**
 		 * This is the main execution method of the class
 		 */
-		public void execute() {
+		public String execute(List<String> people) {
 			
 			
 			List<GrantBean> grant = null;
 			
 			//Initialize connection pool and fill it with connection
-			this.people = this.edi.getPeopleInVivo(this.jcf);
+			this.people = people;//this.edi.getPeopleInVivo(this.jcf);
 			Iterator<String> it = this.people.iterator();
 			while(it.hasNext()) {
 				String cwid = it.next().trim();
@@ -125,7 +136,7 @@ public class GrantsFetchFromED {
 			log.info("Total new grants inserted into VIVO: " + this.insertCount);
 			log.info("Total existing grants that were updated: " + this.updateCount);
 			
-			
+			return "Grants fetch completed successfully";
 		}
 		
 		/**
@@ -1563,7 +1574,7 @@ public class GrantsFetchFromED {
 		 */
 		private List<GrantBean> getGrantsFromCoeus(String cwid) {
 			
-			Connection con = mcf.getConnectionfromPool("INFOED");
+			Connection con = mcf.getInfoEdConnectionfromPool("INFOED");
 			List<GrantBean> grant = new ArrayList<GrantBean>();
 			
 			StringBuilder selectQuery = new StringBuilder();
@@ -1736,7 +1747,7 @@ public class GrantsFetchFromED {
 		 * @return the deptID
 		 */
 		private String getDepartmentCode(String deptName, String unitCode, GrantBean gb) {
-			Connection con = mcf.getConnectionfromPool("ASMS");
+			Connection con = mcf.getAsmsConnectionfromPool("ASMS");
 			String deptId = null;
 			java.sql.ResultSet rs = null;
 			Statement st = null;
