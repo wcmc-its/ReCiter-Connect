@@ -34,11 +34,6 @@ import reciter.connect.vivo.sdb.VivoGraphs;
 @Component
 public class AcademicFetchFromED {
 	
-	/**
-	 * List of people in VIVO
-	 */
-	private ArrayList<PeopleBean> people = new ArrayList<PeopleBean>();
-	
 	private int updateCount = 0;
 	
 	public static String propertyFilePath;
@@ -69,12 +64,9 @@ public class AcademicFetchFromED {
 		 */
 	public void execute() throws IOException {
 
-		getActivePeopleFromED();
-		
+		List<PeopleBean> people = getActivePeopleFromED();
 		int count = 0;
-		
-		
-		Iterator<PeopleBean>  it = this.people.iterator();
+		Iterator<PeopleBean>  it = people.iterator();
 		while(it.hasNext()) {
 			PeopleBean pb = it.next();
 			log.info("################################ " + pb.getCwid() + " - " + pb.getDisplayName() + " - Insert/Update Operation #####################");
@@ -103,8 +95,9 @@ public class AcademicFetchFromED {
 		/**
 		 * This function gets active people from Enterprise Directory having personTypeCode as academic
 		 */
-		private void getActivePeopleFromED() {
+		private List<PeopleBean> getActivePeopleFromED() {
 
+			List<PeopleBean> people = new ArrayList<>();
 			int noCwidCount = 0;
 			String filter = "(&(objectClass=eduPerson)(weillCornellEduPersonTypeCode=academic))";
 			
@@ -176,15 +169,16 @@ public class AcademicFetchFromED {
 							log.info(s);
 						}
 						log.info("------------------------------------------------------------------------------------------------------------");
-						this.people.add(pb);
+						people.add(pb);
 				}
 			}
-				log.info("Number of people found: " + this.people.size());
+				log.info("Number of people found: " + people.size());
 				log.info("No of Records with no CWID: " + noCwidCount);
 			}
 			else {
 				log.info("No results found");
-			}		
+			}
+			return people;	
 		}
 		
 		/**

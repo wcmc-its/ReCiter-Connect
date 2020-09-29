@@ -183,6 +183,8 @@ public class Application implements ApplicationRunner {
 
         if (jenaConnectionFactory != null)
             jenaConnectionFactory.destroyConnectionPool();
+
+        ((ConfigurableApplicationContext)context).close();
     }
 
     public static <T> CompletableFuture<List<T>> allOf(List<CompletableFuture<T>> futuresList) {

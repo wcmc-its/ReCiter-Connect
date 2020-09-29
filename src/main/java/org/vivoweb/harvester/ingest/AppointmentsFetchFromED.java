@@ -47,9 +47,6 @@ import com.unboundid.ldap.sdk.SearchResultEntry;
 @Component
 public class AppointmentsFetchFromED {
 
-	private List<String> people = new ArrayList<String>();
-	private ArrayList<OfaBean> ofaData = new ArrayList<OfaBean>();
-
 	SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 	
 	/**
@@ -60,15 +57,11 @@ public class AppointmentsFetchFromED {
 	
 	private Connection con = null;
 	
-	
 	/**
 	 * Jena connection factory object for all the apache jena sdb related connections
 	 */
 	@Autowired
 	private JenaConnectionFactory jcf;
-
-	@Autowired
-	private EdDataInterface edi;
 
 	@Autowired
 	private VivoClient vivoClient;
@@ -105,29 +98,26 @@ public class AppointmentsFetchFromED {
 		
 		int insertCount = 0;
 		int updateCount = 0;
+		List<OfaBean> ofaData = new ArrayList<>();
 		//Initialize connection pool and fill it with connection
 		this.con = this.mcf.getAsmsConnectionfromPool("ASMS");
-		
-		OfaBean ob1 = new OfaBean();
-		
-		this.people = people;//this.edi.getPeopleInVivo(this.jcf); //Get all the faculty in VIVO
-		
-		Iterator<String> it = this.people.iterator();
+		Iterator<String> it = people.iterator();
 		while(it.hasNext()) {
-		OfaBean ob = getRolesFromED(it.next()); //Get all the appointments in ED
-		ArrayList<EducationBean> edu = getEducationAndTraining(ob.getCwid()); //Get all the education and training data from OFA
-		ob.setEdu(edu);
-		this.ofaData.add(ob);
+			String cwid = it.next();
+			OfaBean ob = getRolesFromED(cwid); //Get all the appointments in ED
+			ArrayList<EducationBean> edu = getEducationAndTraining(ob.getCwid()); //Get all the education and training data from OFA
+			ob.setEdu(edu);
+			ofaData.add(ob);
 		}
 		
 		if(this.con!=null) {
 			this.mcf.returnConnectionToPool("ASMS", con);
 		}
 		
-		Iterator<OfaBean>  it1 = this.ofaData.iterator();
+		Iterator<OfaBean>  it1 = ofaData.iterator();
 		while(it1.hasNext()) {
+			OfaBean ob1 = it1.next();
 			log.info("#########################################################");
-			ob1 = it1.next();
 			if(!checkOfaDataInVivo(ob1)) {
 				log.info("Person: "+ob1.getCwid() + " does not has appointments in VIVO");
 				insertOfaDataInVivo(ob1);

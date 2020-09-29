@@ -18,7 +18,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.Map.Entry;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
 
 import org.apache.commons.lang.StringEscapeUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -69,9 +68,6 @@ public class GrantsFetchFromED {
 	private JenaConnectionFactory jcf;
 
 	@Autowired
-	private EdDataInterface edi;
-
-	@Autowired
 	private VivoClient vivoClient;
 	
 	/**
@@ -79,11 +75,6 @@ public class GrantsFetchFromED {
 	 */
 	private String vivoNamespace = JenaConnectionFactory.nameSpace;
 	
-	
-	/**
-	 * List of people in VIVO
-	 */
-	private List<String> people = new ArrayList<String>();
 	
 	SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 	
@@ -105,18 +96,13 @@ public class GrantsFetchFromED {
 		 * This is the main execution method of the class
 		 */
 		public String execute(List<String> people) {
-			
-			
 			List<GrantBean> grant = null;
-			
-			//Initialize connection pool and fill it with connection
-			this.people = people;//this.edi.getPeopleInVivo(this.jcf);
-			Iterator<String> it = this.people.iterator();
+			Iterator<String> it = people.iterator();
 			while(it.hasNext()) {
 				String cwid = it.next().trim();
 				log.info("#########################################################");
 				log.info("Trying to fetch grants for cwid - " + cwid);
-				grant = getGrantsFromCoeus(cwid);
+				grant = getGrantsFromCoeus(cwid, people);
 				if(grant.isEmpty())
 					log.info("There is no grants for cwid - " + cwid + " in Coeus");
 				checkGrantExistInVivo(grant,cwid);
@@ -1572,7 +1558,7 @@ public class GrantsFetchFromED {
 		 * @param cwid unique identifier for faculty
 		 * @return list of grants
 		 */
-		private List<GrantBean> getGrantsFromCoeus(String cwid) {
+		private List<GrantBean> getGrantsFromCoeus(String cwid, List<String> people) {
 			
 			Connection con = mcf.getInfoEdConnectionfromPool("INFOED");
 			List<GrantBean> grant = new ArrayList<GrantBean>();
@@ -1638,7 +1624,7 @@ public class GrantsFetchFromED {
 					if(rs.getString(12) != null)
 						gb.setSponsorCode(rs.getString(12).trim());
 					
-					gb.setContributors(getContributors(gb, gb.getAwardNumber(), con));
+					gb.setContributors(getContributors(gb, gb.getAwardNumber(), con, people));
 					
 
 					grant.add(gb);
@@ -1678,7 +1664,7 @@ public class GrantsFetchFromED {
 		 * @param cwid unique identifier for faculty
 		 * @return a map of contributors having cwid and contributor type
 		 */
-		private Map<String, String> getContributors(GrantBean gb, String accountNumber, Connection con) {
+		private Map<String, String> getContributors(GrantBean gb, String accountNumber, Connection con, List<String> people) {
 			Map<String, String> contributors = new HashMap<String, String>();
 			String contributor = null;
 			
@@ -1707,7 +1693,7 @@ public class GrantsFetchFromED {
 						if(rs.getString(1) != null)
 							contributor = rs.getString(1).trim();
 						
-						if(contributor != null && this.people.contains(contributor.trim())){
+						if(contributor != null && people.contains(contributor.trim())){
 							if(rs.getString(13) != null)
 								contributors.put(contributor, rs.getString(13));
 						}
