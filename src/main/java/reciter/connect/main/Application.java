@@ -120,7 +120,7 @@ public class Application implements ApplicationRunner {
         GrantsFetchFromED grantsFetchFromED = context.getBean(GrantsFetchFromED.class);
         AppointmentsFetchFromED appointmentsFetchFromED = context.getBean(AppointmentsFetchFromED.class);
 
-        ExecutorService executor = Executors.newWorkStealingPool();
+        ExecutorService executor = Executors.newFixedThreadPool(25);
 
         try {
             //academicFetchFromED.execute();
@@ -134,6 +134,7 @@ public class Application implements ApplicationRunner {
                     callables.add(appointmentsFetchFromED.getCallable(Arrays.asList(peopleSubset)));
                     callables.add(grantsFetchFromED.getCallable(Arrays.asList(peopleSubset)));
                 }
+                log.info("Appointment & Grant fetch will run for " + subsetPeoples.toString());
                 try {
                     executor.invokeAll(callables)
                     .stream()

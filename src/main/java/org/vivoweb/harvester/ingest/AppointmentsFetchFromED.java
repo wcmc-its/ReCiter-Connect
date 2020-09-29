@@ -147,7 +147,7 @@ public class AppointmentsFetchFromED {
 		log.info("Appointments updated for " + updateCount + " people");
 		log.info("Appointments fetch completed successfully...");
 
-		return "People fetch completed successfully";
+		return "People fetch completed successfully for cwids: " + people.toString();
 	}
 		
 		/**
@@ -210,7 +210,9 @@ public class AppointmentsFetchFromED {
 						rb.setStartDate(entry.getAttributeValue("weillCornellEduStartDate").substring(0, 4));
 						String ldapEndDate = entry.getAttributeValue("weillCornellEduEndDate").substring(0, 4) + "-" + entry.getAttributeValue("weillCornellEduEndDate").substring(4, 6) + "-" + entry.getAttributeValue("weillCornellEduEndDate").substring(6, 8);
 						try {
-							endDate = this.sdf.parse(ldapEndDate);
+							if(ldapEndDate.length() > 0)
+								endDate = this.sdf.parse(ldapEndDate);
+
 							currDate = this.sdf.parse(this.strDate);
 						} catch(ParseException e) {
 							log.error("ParseException", e);

@@ -136,7 +136,7 @@ public class GrantsFetchFromED {
 			log.info("Total new grants inserted into VIVO: " + this.insertCount);
 			log.info("Total existing grants that were updated: " + this.updateCount);
 			
-			return "Grants fetch completed successfully";
+			return "Grants fetch completed successfully for cwids: " + people.toString();
 		}
 		
 		/**
