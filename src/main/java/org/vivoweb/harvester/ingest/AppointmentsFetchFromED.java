@@ -77,10 +77,7 @@ public class AppointmentsFetchFromED {
 	@Autowired
 	private MssqlConnectionFactory mcf;
 	
-	Date now = new Date();
-	private String strDate = sdf.format(now);
-	
-	private String currYear = new SimpleDateFormat("yyyy").format(now);
+	private String currYear = new SimpleDateFormat("yyyy").format(new Date());
 
 	public Callable<String> getCallable(List<String> people) {
         return new Callable<String>() {
@@ -95,7 +92,6 @@ public class AppointmentsFetchFromED {
 		 * @throws IOException when connecting to ED
 		 */
 	public String execute(List<String> people) throws IOException {
-		
 		int insertCount = 0;
 		int updateCount = 0;
 		List<OfaBean> ofaData = new ArrayList<>();
@@ -146,6 +142,8 @@ public class AppointmentsFetchFromED {
 		 * @return The bean which holds appointment and education data
 		 */
 		private OfaBean getRolesFromED(String cwid) {
+			Date now = new Date();
+			String strDate = sdf.format(now);
 			OfaBean ob = new OfaBean();
 			ArrayList<RoleBean> roles = new ArrayList<RoleBean>();
 			
@@ -200,10 +198,13 @@ public class AppointmentsFetchFromED {
 						rb.setStartDate(entry.getAttributeValue("weillCornellEduStartDate").substring(0, 4));
 						String ldapEndDate = entry.getAttributeValue("weillCornellEduEndDate").substring(0, 4) + "-" + entry.getAttributeValue("weillCornellEduEndDate").substring(4, 6) + "-" + entry.getAttributeValue("weillCornellEduEndDate").substring(6, 8);
 						try {
-							if(ldapEndDate.length() > 0)
+							log.info("Ldap end date: " + ldapEndDate);
+							if(ldapEndDate.matches("[0-9]+") && ldapEndDate.length() > 2)
 								endDate = this.sdf.parse(ldapEndDate);
-
-							currDate = this.sdf.parse(this.strDate);
+							
+							log.info("current date: " + strDate);
+							if(strDate.matches("[0-9]+") && strDate.length() > 2)
+								currDate = this.sdf.parse(strDate);
 						} catch(ParseException e) {
 							log.error("ParseException", e);
 						}
@@ -453,7 +454,8 @@ public class AppointmentsFetchFromED {
 		 * @param ob The bean object containing role and education & training data both
 		 */
 		private void insertOfaDataInVivo(OfaBean ob) {
-			
+			Date now = new Date();
+			String strDate = sdf.format(now);
 			
 			StringBuilder sb = new StringBuilder();
 			sb.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
@@ -482,7 +484,7 @@ public class AppointmentsFetchFromED {
 						sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> rdfs:label \"" + rb.getTitleCode().trim() + "\" . \n");
 						sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> . \n");
 						sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> core:relates <" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> . \n");
-						sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> core:DateTimeValue \"" + this.strDate + "\" . \n");
+						sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> core:DateTimeValue \"" + strDate + "\" . \n");
 						sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> core:relatedBy <" + this.vivoNamespace + "position-" + rb.getSorId().trim() +"> . \n");
 						sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type core:Department . \n");
 						sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type core:AcademicDepartment . \n");
@@ -548,7 +550,7 @@ public class AppointmentsFetchFromED {
 					sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> rdfs:label \"" + rb.getTitleCode().trim() + "\" . \n");
 					sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> . \n");
 					sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> core:relates <" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> . \n");
-					sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> core:DateTimeValue \"" + this.strDate + "\" . \n");
+					sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> core:DateTimeValue \"" + strDate + "\" . \n");
 					sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> core:relatedBy <" + this.vivoNamespace + "position-" + rb.getSorId().trim() +"> . \n");
 					sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type core:Department . \n");
 					sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type core:AcademicDepartment . \n");
@@ -611,7 +613,7 @@ public class AppointmentsFetchFromED {
 				sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> . \n");
 				sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:assignedBy <" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> .\n");
 				sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0002353 <" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> .\n");
-				sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + this.strDate + "\" .\n");
+				sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + strDate + "\" .\n");
 				sb.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> <http://vivoweb.org/ontology/core#abbreviation> \"" + edu.getDegreeName().trim() + "\" . \n");
 				sb.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> rdfs:label \"" + edu.getDegreeName().trim() + "\" . \n");
 				sb.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> core:relatedBy <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> . \n");
@@ -629,7 +631,7 @@ public class AppointmentsFetchFromED {
 				sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0000057 <" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> . \n");
 				sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0002234 <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> . \n");
 				sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> . \n");
-				sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + this.strDate + "\" .\n");
+				sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + strDate + "\" .\n");
 				sb.append("<" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> rdf:type core:DateTimeInterval . \n");
 				sb.append("<" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> core:end <" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> . \n");
 				sb.append("<" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> rdf:type core:DateTimeValue . \n");
@@ -739,7 +741,8 @@ public class AppointmentsFetchFromED {
 		 * @throws IOException thrown by SDBJenaConnect
 		 */
 		private int checkForUpdates(OfaBean ob, String cwid) throws IOException {
-			
+			Date now = new Date();
+			String strDate = sdf.format(now);
 			int updateCount = 0;
 			
 			ArrayList<RoleBean> rb = ob.getRoles();
@@ -787,7 +790,7 @@ public class AppointmentsFetchFromED {
 						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> rdfs:label \"" + role.getTitleCode().trim() + "\" . \n");
 						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> . \n");
 						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:relates <" + this.vivoNamespace + "org-u" + role.getDeptCode() + "> . \n");
-						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:DateTimeValue \"" + this.strDate + "\" . \n");
+						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:DateTimeValue \"" + strDate + "\" . \n");
 						insertQuery.append("<" + this.vivoNamespace + "org-u" + role.getDeptCode() + "> core:relatedBy <" + this.vivoNamespace + "position-" + role.getSorId().trim() +"> . \n");
 						insertQuery.append("<" + this.vivoNamespace + "org-u" + role.getDeptCode() + "> rdf:type core:AcademicDepartment . \n");
 						insertQuery.append("<" + this.vivoNamespace + "org-u" + role.getDeptCode() + "> vitro:mostSpecificType core:AcademicDepartment . \n");
@@ -863,7 +866,7 @@ public class AppointmentsFetchFromED {
 						updateQuery.append("} \n");
 						updateQuery.append("INSERT { \n");
 						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> . \n");
-						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:DateTimeValue \"" + this.strDate + "\" . \n");
+						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:DateTimeValue \"" + strDate + "\" . \n");
 						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
 						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> . \n");
 						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-" + role.getEndDate().trim() + "> . \n");
@@ -898,7 +901,7 @@ public class AppointmentsFetchFromED {
 						updateQuery.append("} \n");
 						updateQuery.append("INSERT { \n");
 						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + "> . \n");
-						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:DateTimeValue \"" + this.strDate + "\" . \n");
+						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:DateTimeValue \"" + strDate + "\" . \n");
 						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> rdf:type core:DateTimeInterval . \n");
 						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> core:start <" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> . \n");
 						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> vitro:mostSpecificType core:DateTimeInterval . \n");
@@ -980,7 +983,7 @@ public class AppointmentsFetchFromED {
 					insertQuery.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> . \n");
 					insertQuery.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:assignedBy <" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> .\n");
 					insertQuery.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0002353 <" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> .\n");
-					insertQuery.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + this.strDate + "\" .\n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + strDate + "\" .\n");
 					insertQuery.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> <http://vivoweb.org/ontology/core#abbreviation> \"" + edu.getDegreeName().trim() + "\" . \n");
 					insertQuery.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> rdfs:label \"" + edu.getDegreeName().trim() + "\" . \n");
 					insertQuery.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> core:relatedBy <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> . \n");
@@ -997,7 +1000,7 @@ public class AppointmentsFetchFromED {
 					insertQuery.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0000057 <" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> . \n");
 					insertQuery.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0002234 <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> . \n");
 					insertQuery.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> . \n");
-					insertQuery.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + this.strDate + "\" .\n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + strDate + "\" .\n");
 					insertQuery.append("<" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> rdf:type core:DateTimeInterval . \n");
 					insertQuery.append("<" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> core:end <" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> . \n");
 					insertQuery.append("<" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> rdf:type core:DateTimeValue . \n");
@@ -1088,7 +1091,8 @@ public class AppointmentsFetchFromED {
 		 * @param cwid This is the unique identifier of the person
 		 */
 		private void syncAppointmentsInVivo(ArrayList<RoleBean> edRole, String cwid) {
-			
+			Date now = new Date();
+			String strDate = sdf.format(now);
 			ArrayList<RoleBean> vivoRole = new ArrayList<RoleBean>();
 			
 			StringBuilder sb = new StringBuilder();
@@ -1204,7 +1208,7 @@ public class AppointmentsFetchFromED {
 								sb.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> vitro:mostSpecificType core:DateTimeInterval . \n");
 								sb.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
 							}
-							sb.append("<" + this.vivoNamespace + "position-" + r.getSorId().trim() + "> core:DateTimeValue \"" + this.strDate + "\" . \n");
+							sb.append("<" + this.vivoNamespace + "position-" + r.getSorId().trim() + "> core:DateTimeValue \"" + strDate + "\" . \n");
 							sb.append("} \n");
 							if(r.getStartDate() == null) {
 								sb.append("}");
