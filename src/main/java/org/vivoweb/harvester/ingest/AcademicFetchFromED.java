@@ -8,11 +8,14 @@ import java.util.Date;
 import java.util.Iterator;
 
 import java.util.List;
+import java.util.concurrent.Callable;
+
 import org.apache.commons.lang.StringEscapeUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StopWatch;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -57,14 +60,21 @@ public class AcademicFetchFromED {
 	 * @throws IOException
 	 * @throws FileNotFoundException
 	 */
-		
+	
+	public Callable<String> getCallable(List<PeopleBean> people) {
+        return new Callable<String>() {
+            public String call() throws Exception {
+                return execute(people);
+            }
+        };
+    }
 		
 		/**
 		 * This is the main execution method of the class
 		 */
-	public void execute() throws IOException {
-
-		List<PeopleBean> people = getActivePeopleFromED();
+	public String execute(List<PeopleBean> people) throws IOException {
+		StopWatch stopWatch = new StopWatch("People fetch performance");
+		stopWatch.start("Person updates");
 		int count = 0;
 		Iterator<PeopleBean>  it = people.iterator();
 		while(it.hasNext()) {
@@ -87,15 +97,16 @@ public class AcademicFetchFromED {
 		
 		log.info("Number of people updated in VIVO: " + this.updateCount);
 		
-		
-		log.info("People fetch completed successfully...");
+		stopWatch.stop();
+		log.info("People fetch Time taken: " + stopWatch.getTotalTimeSeconds() + "s");
+		return "People fetch completed successfully for cwids: " + people.toString();
 	}
 		
 		
 		/**
 		 * This function gets active people from Enterprise Directory having personTypeCode as academic
 		 */
-		private List<PeopleBean> getActivePeopleFromED() {
+		public List<PeopleBean> getActivePeopleFromED() {
 
 			List<PeopleBean> people = new ArrayList<>();
 			int noCwidCount = 0;
@@ -778,15 +789,13 @@ public class AcademicFetchFromED {
 		                
 						log.info("Insert Query: " + sb.toString());
 						log.info(this.vivoClient.vivoUpdateApi(sb.toString()));
+						//Run inferencing on the updated triples
+						//insertInferenceTriples(pb);
 	                }
 					
 			} catch(Exception e) {
 				log.error("Api Exception" ,e);
 			}
-			
-			//Run inferencing on the updated triples
-			
-			//insertInferenceTriples(pb);
 			
 			
 		}

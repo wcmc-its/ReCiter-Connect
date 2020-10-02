@@ -22,6 +22,7 @@ import java.util.concurrent.Callable;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StopWatch;
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
 
 import lombok.extern.slf4j.Slf4j;
@@ -96,6 +97,8 @@ public class GrantsFetchFromED {
 		 * This is the main execution method of the class
 		 */
 		public String execute(List<String> people) {
+			StopWatch stopWatch = new StopWatch("Grants fetch performance");
+			stopWatch.start("Grants updates");
 			List<GrantBean> grant = null;
 			Iterator<String> it = people.iterator();
 			while(it.hasNext()) {
@@ -121,7 +124,8 @@ public class GrantsFetchFromED {
 
 			log.info("Total new grants inserted into VIVO: " + this.insertCount);
 			log.info("Total existing grants that were updated: " + this.updateCount);
-			
+			stopWatch.stop();
+			log.info("Grants fetch Time taken: " + stopWatch.getTotalTimeSeconds() + "s");
 			return "Grants fetch completed successfully for cwids: " + people.toString();
 		}
 		
@@ -135,11 +139,11 @@ public class GrantsFetchFromED {
 				String sparqlQuery = "PREFIX rdf:      <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 					 "PREFIX foaf:     <http://xmlns.com/foaf/0.1/> \n" +
 					 "SELECT  (count(?o) as ?grant) \n" +
-					 "FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> \n" +
 					 "WHERE \n" +
 					 "{ \n" +
+					 "GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> { \n" +
 					 "<" + this.vivoNamespace + "grant-" + grants.get(i).getAwardNumber().trim() + "> ?p ?o . \n" +
-					 "}";
+					 "}}";
 				try {
 					String response = this.vivoClient.vivoQueryApi(sparqlQuery);
 					log.info(response);
@@ -183,12 +187,12 @@ public class GrantsFetchFromED {
 			sb.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
 			sb.append("PREFIX foaf: <http://xmlns.com/foaf/0.1/> \n");
 			sb.append("select ?person ?dateTimeInterval \n");
-			sb.append("from <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> \n");
 			sb.append("where { \n");
+			sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> {\n");
 			sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates ?person . \n");
 			sb.append("?person rdf:type foaf:Person . \n");
 			sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:dateTimeInterval ?dateTimeInterval . \n");
-			sb.append("}");
+			sb.append("}}");
 			
 			//log.info(sb.toString());
 			
@@ -587,7 +591,7 @@ public class GrantsFetchFromED {
 				
 				gb.setContributors(newContributors);
 				
-				/* if(!newContributors.isEmpty())
+				/*if(!newContributors.isEmpty())
 					insertInferenceTriples(gb, crudStatus); */
 				
 				this.updateCount = this.updateCount + 1;
@@ -608,12 +612,12 @@ public class GrantsFetchFromED {
 			sb.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
 			sb.append("PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n");
 			sb.append("select ?fundingOrganization ?fundingOrganizationLabel \n");
-			sb.append("from <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> \n");
 			sb.append("where { \n");
+			sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> {\n");
 			sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:assignedBy ?fundingOrganization . \n");
 			sb.append("?fundingOrganization rdf:type core:FundingOrganization . \n");
 			sb.append("?fundingOrganization rdfs:label ?fundingOrganizationLabel . \n");
-			sb.append("}");
+			sb.append("}}");
 			
 			//log.info(sb.toString());
 			
@@ -703,8 +707,8 @@ public class GrantsFetchFromED {
 								sb.append("<" + this.vivoNamespace + "org-f" + gb.getSponsorCode() + "> vitro:mostSpecificType core:FundingOrganization . \n");
 								sb.append("}}");
 								
-								/* response = vivoClient.vivoUpdateApi(sb.toString());
-								log.info(response); */ 
+								/*response = vivoClient.vivoUpdateApi(sb.toString());
+								log.info(response);*/
 							}
 						}
 					}
@@ -736,11 +740,11 @@ public class GrantsFetchFromED {
 			sb.append("PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n");
 			sb.append("PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n");
 			sb.append("select ?grant \n");
-			sb.append("from <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> \n");
 			sb.append("where { \n");
+			sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> {\n");
 			sb.append("<" + this.vivoNamespace + "cwid-" + cwid.trim() + "> core:relatedBy ?grant . \n");
 			sb.append("?grant rdf:type core:Grant . \n");
-			sb.append("}");
+			sb.append("}}");
 			
 			//log.info(sb.toString());
 			
@@ -772,14 +776,14 @@ public class GrantsFetchFromED {
 					sb.append("PREFIX obo: <http://purl.obolibrary.org/obo/> \n");
 					sb.append("PREFIX foaf: <http://xmlns.com/foaf/0.1/> \n");
 					sb.append("select distinct ?role ?cwid \n");
-					sb.append("from <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> \n");
 					sb.append("where { \n");
+					sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> {\n");
 					sb.append("<" + this.vivoNamespace + "grant-" + grantid.trim() + "> rdf:type core:Grant . \n");
 					sb.append("<" + this.vivoNamespace + "grant-" + grantid.trim() + "> core:relates ?role . \n");
 					sb.append("?role obo:RO_0000052 ?cwid . \n");
 					sb.append("?cwid rdf:type foaf:Person . \n");
 					sb.append("FILTER(REGEX(STR(?role),\"http://vivo.med.cornell.edu/individual/role-\")) \n");
-					sb.append("}");
+					sb.append("}}");
 					
 					try{
 						ResultSet rs = vivoJena.executeSelectQuery(sb.toString());

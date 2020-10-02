@@ -31,12 +31,12 @@ public class EdDataInterfaceImpl implements EdDataInterface {
 		String sparqlQuery = "PREFIX rdf:      <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 				"PREFIX foaf:     <http://xmlns.com/foaf/0.1/> \n" +
 				"SELECT  ?people \n" +
-				"FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n" +
-				"WHERE \n" +
+				"WHERE {\n" +
+				"GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n" +
 				"{ \n" +
 				"?people rdf:type foaf:Person . \n" +
 				//"FILTER(REGEX(STR(?people),\"bhb9002\")) \n" +
-				"}";
+				"}}";
 		
 		try {
 			String response = vivoClient.vivoQueryApi(sparqlQuery);

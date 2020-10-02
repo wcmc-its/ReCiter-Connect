@@ -117,7 +117,7 @@ public class MssqlConnectionFactory {
 	 * @return boolean
 	 */
 	private synchronized boolean checkIfInfoEdConnectionPoolIsFull() {
-		final int MAX_POOL_SIZE = 15;
+		final int MAX_POOL_SIZE = 20;
 		if(this.infoEdConnectionPool.size()<MAX_POOL_SIZE)
 			return false;
 		else

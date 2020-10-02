@@ -45,6 +45,7 @@ import reactor.netty.http.client.HttpClient;
 import reciter.connect.api.client.ReCiterClient;
 import reciter.connect.api.client.model.ArticleRetrievalModel;
 import reciter.connect.api.client.model.exception.ApiException;
+import reciter.connect.beans.vivo.PeopleBean;
 import reciter.connect.database.ldap.LDAPConnectionFactory;
 import reciter.connect.database.mssql.MssqlConnectionFactory;
 import reciter.connect.database.mysql.MysqlConnectionFactory;
@@ -123,12 +124,38 @@ public class Application implements ApplicationRunner {
         ExecutorService executor = Executors.newFixedThreadPool(25);
 
         try {
-            //academicFetchFromED.execute();
-            List<String> people = edDataInterface.getPeopleInVivo(jenaConnectionFactory);
-            List<List<String>> peopleSubSets = Lists.partition(people, 10);
-            Iterator<List<String>> subSetsIteratorPeople = peopleSubSets.iterator();
-		    while (subSetsIteratorPeople.hasNext()) {
-                List<String> subsetPeoples = subSetsIteratorPeople.next();
+            List<PeopleBean> people = academicFetchFromED.getActivePeopleFromED();
+            List<List<PeopleBean>> peopleSubSets = Lists.partition(people, 10);
+            Iterator<List<PeopleBean>> subSetsIteratorPeople = peopleSubSets.iterator();
+            while (subSetsIteratorPeople.hasNext()) {
+                List<PeopleBean> subsetPeoples = subSetsIteratorPeople.next();
+                List<Callable<String>> callables = new ArrayList<>();
+                for(PeopleBean peopleSubset: subsetPeoples) {
+                    callables.add(academicFetchFromED.getCallable(Arrays.asList(peopleSubset)));
+                }
+                log.info("People fetch will run for " + subsetPeoples.toString());
+                try {
+                    executor.invokeAll(callables)
+                    .stream()
+                    .map(future -> {
+                        try {
+                            return future.get();
+                        }
+                        catch (Exception e) {
+                            throw new IllegalStateException(e);
+                        }
+                    }).forEach(System.out::println);
+                } catch (InterruptedException e) {
+                    log.error("Unable to invoke callable.", e);
+                }
+                callables.clear();
+            }
+            List<String> peopleCwids = people.stream().map(PeopleBean::getCwid).collect(Collectors.toList());
+            
+            List<List<String>> peopleCwidsSubSets = Lists.partition(peopleCwids, 10);
+            Iterator<List<String>> subSetsIteratorPeopleCwids = peopleCwidsSubSets.iterator();
+		    while (subSetsIteratorPeopleCwids.hasNext()) {
+                List<String> subsetPeoples = subSetsIteratorPeopleCwids.next();
                 List<Callable<String>> callables = new ArrayList<>();
                 for(String peopleSubset: subsetPeoples) {
                     callables.add(appointmentsFetchFromED.getCallable(Arrays.asList(peopleSubset)));
@@ -184,7 +211,7 @@ public class Application implements ApplicationRunner {
         if (jenaConnectionFactory != null)
             jenaConnectionFactory.destroyConnectionPool();
 
-        ((ConfigurableApplicationContext)context).close();
+        System.exit(0);
     }
 
     public static <T> CompletableFuture<List<T>> allOf(List<CompletableFuture<T>> futuresList) {
