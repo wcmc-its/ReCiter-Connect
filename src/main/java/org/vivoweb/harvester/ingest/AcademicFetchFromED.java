@@ -295,7 +295,7 @@ public class AcademicFetchFromED {
 			}
 
 			
-			//insertInferenceTriples(pb);
+			insertInferenceTriples(pb);
 		}
 		
 		/**
@@ -790,7 +790,7 @@ public class AcademicFetchFromED {
 						log.info("Insert Query: " + sb.toString());
 						log.info(this.vivoClient.vivoUpdateApi(sb.toString()));
 						//Run inferencing on the updated triples
-						//insertInferenceTriples(pb);
+						insertInferenceTriples(pb);
 	                }
 					
 			} catch(Exception e) {

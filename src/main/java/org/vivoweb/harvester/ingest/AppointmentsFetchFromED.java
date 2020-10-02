@@ -657,7 +657,7 @@ public class AppointmentsFetchFromED {
 				log.info("Api Exception", e);
 			}
 			
-			//insertInferenceTriples(ob);
+			insertInferenceTriples(ob);
 		}
 		
 		/**
@@ -1076,7 +1076,7 @@ public class AppointmentsFetchFromED {
 			}
 			
 			
-			//insertInferenceTriples(ob);
+			insertInferenceTriples(ob);
 			//Check if any appointment needs to be deleted in VIVO
 			syncAppointmentsInVivo(rb, cwid);
 			
@@ -1295,12 +1295,12 @@ public class AppointmentsFetchFromED {
 						
 						log.info(sb.toString());
 						
-						/* try{
+						try{
 							String response = this.vivoClient.vivoUpdateApi(sb.toString());
 							log.info(response);
 						} catch(Exception  e) {
 							log.info("Api Exception", e);
-						} */
+						} 
 						
 						
 					}

@@ -591,8 +591,8 @@ public class GrantsFetchFromED {
 				
 				gb.setContributors(newContributors);
 				
-				/*if(!newContributors.isEmpty())
-					insertInferenceTriples(gb, crudStatus); */
+				if(!newContributors.isEmpty())
+					insertInferenceTriples(gb, crudStatus); 
 				
 				this.updateCount = this.updateCount + 1;
 			}
@@ -707,8 +707,8 @@ public class GrantsFetchFromED {
 								sb.append("<" + this.vivoNamespace + "org-f" + gb.getSponsorCode() + "> vitro:mostSpecificType core:FundingOrganization . \n");
 								sb.append("}}");
 								
-								/*response = vivoClient.vivoUpdateApi(sb.toString());
-								log.info(response);*/
+								response = vivoClient.vivoUpdateApi(sb.toString());
+								log.info(response);
 							}
 						}
 					}
@@ -1440,7 +1440,7 @@ public class GrantsFetchFromED {
 			} catch(Exception  e) {
 				log.info("Api Exception", e);
 			}
-			//insertInferenceTriples(gb, crudStatus);
+			insertInferenceTriples(gb, crudStatus);
 			log.info("Successful insertion of grant-" + gb.getAwardNumber() + " for cwid: " + cwid);
 		}
 
