@@ -62,7 +62,7 @@ public class JenaConnectionFactory {
         this.dbLayout = dbLayout;
 		this.dbDriver = dbDriver;
 		this.nameSpaceProp = namespace;
-		//initialize();
+		initialize();
 		if(nameSpaceProp != null && nameSpaceProp.trim().length() != 0) {
 			JenaConnectionFactory.nameSpace=(nameSpaceProp.trim().endsWith("/"))?nameSpaceProp.trim():nameSpaceProp.trim().concat("/");
         }
@@ -86,7 +86,6 @@ public class JenaConnectionFactory {
 			this.connectionPool.put(createNewConnectionForPool(VivoGraphs.OFA_GRAPH.getValue()),"wcmcOfa");
 			this.connectionPool.put(createNewConnectionForPool(VivoGraphs.INFOED_GRAPH.getValue()),"wcmcCoeus");
 			this.connectionPool.put(createNewConnectionForPool(VivoGraphs.PUBLICATIONS_GRAPH.getValue()),"wcmcPublications");
-			//this.connectionPool.put(createNewConnectionForPool("http://vitro.mannlib.cornell.edu/a/graph/wcmcVivo"),"wcmcVivo");
 			this.connectionPool.put(createNewConnectionForPool(VivoGraphs.VITRO_KB_INF_GRAPH.getValue()),"vitro-kb-inf");
 			this.connectionPool.put(createNewConnectionForPool(VivoGraphs.DEFAULT_KB_2_GRAPH.getValue()),"vitro-kb-2");
 			this.connectionPool.put(createNewDataSetConnectionForPool(),"dataSet");
@@ -181,10 +180,6 @@ public class JenaConnectionFactory {
 	public SDBJenaConnect createNewDataSetConnectionForPool()
 	{
 		SDBJenaConnect vivoJena = null;
-		if(nameSpaceProp != null && nameSpaceProp.trim().length() != 0) {
-			JenaConnectionFactory.nameSpace=(nameSpaceProp.trim().endsWith("/"))?nameSpaceProp.trim():nameSpaceProp.trim().concat("/");
-        }
-        
 		try {
             vivoJena = new SDBJenaConnect(this.dbHost, this.jenaDbUser, this.jenaDbPassword, this.dbType, this.dbDriver, this.dbLayout);
 		} catch(IOException e) {

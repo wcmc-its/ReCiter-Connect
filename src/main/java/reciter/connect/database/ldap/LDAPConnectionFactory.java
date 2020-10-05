@@ -117,7 +117,7 @@ public class LDAPConnectionFactory {
 	 * @return boolean
 	 */
 	private synchronized boolean checkIfConnectionPoolIsFull() {
-		final int MAX_POOL_SIZE = 20;
+		final int MAX_POOL_SIZE = 3;
 		if(this.connectionPool.size()<MAX_POOL_SIZE)
 			return false;
 		else

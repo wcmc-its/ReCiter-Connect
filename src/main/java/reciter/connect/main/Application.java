@@ -121,11 +121,26 @@ public class Application implements ApplicationRunner {
         GrantsFetchFromED grantsFetchFromED = context.getBean(GrantsFetchFromED.class);
         AppointmentsFetchFromED appointmentsFetchFromED = context.getBean(AppointmentsFetchFromED.class);
 
-        ExecutorService executor = Executors.newFixedThreadPool(25);
+        //ExecutorService executor = Executors.newFixedThreadPool(25);
 
         try {
             List<PeopleBean> people = academicFetchFromED.getActivePeopleFromED();
             List<List<PeopleBean>> peopleSubSets = Lists.partition(people, 10);
+            Iterator<List<PeopleBean>> subSetsIteratorPeople = peopleSubSets.iterator();
+            while (subSetsIteratorPeople.hasNext()) {
+                List<PeopleBean> subsetPeoples = subSetsIteratorPeople.next();
+                academicFetchFromED.execute(subsetPeoples);
+            }
+            List<String> peopleCwids = people.stream().map(PeopleBean::getCwid).collect(Collectors.toList());
+            
+            List<List<String>> peopleCwidsSubSets = Lists.partition(peopleCwids, 10);
+            Iterator<List<String>> subSetsIteratorPeopleCwids = peopleCwidsSubSets.iterator();
+		    while (subSetsIteratorPeopleCwids.hasNext()) {
+                List<String> subsetPeoples = subSetsIteratorPeopleCwids.next();
+                appointmentsFetchFromED.execute(subsetPeoples);
+                grantsFetchFromED.execute(subsetPeoples);
+            }
+            /* List<List<PeopleBean>> peopleSubSets = Lists.partition(people, 10);
             Iterator<List<PeopleBean>> subSetsIteratorPeople = peopleSubSets.iterator();
             while (subSetsIteratorPeople.hasNext()) {
                 List<PeopleBean> subsetPeoples = subSetsIteratorPeople.next();
@@ -177,7 +192,7 @@ public class Application implements ApplicationRunner {
                     log.error("Unable to invoke callable.", e);
                 }
                 callables.clear();
-            }
+            } */
             
 
         } catch (Exception e) {
