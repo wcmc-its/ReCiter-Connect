@@ -30,6 +30,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import org.springframework.util.StopWatch;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.vivoweb.harvester.ingest.AcademicFetchFromED;
@@ -116,10 +117,10 @@ public class Application implements ApplicationRunner {
         MysqlConnectionFactory mysqlConnectionFactory = context.getBean(MysqlConnectionFactory.class);
         MssqlConnectionFactory mssqlConnectionFactory = context.getBean(MssqlConnectionFactory.class);
         JenaConnectionFactory jenaConnectionFactory = context.getBean(JenaConnectionFactory.class);
-        SDBQueryInterface sdbQueryInterface = context.getBean(SDBQueryInterface.class);
         AcademicFetchFromED academicFetchFromED = context.getBean(AcademicFetchFromED.class);
         GrantsFetchFromED grantsFetchFromED = context.getBean(GrantsFetchFromED.class);
         AppointmentsFetchFromED appointmentsFetchFromED = context.getBean(AppointmentsFetchFromED.class);
+        ReCiterClient reCiterClient = context.getBean(ReCiterClient.class);
 
         //ExecutorService executor = Executors.newFixedThreadPool(25);
 
@@ -137,8 +138,23 @@ public class Application implements ApplicationRunner {
             Iterator<List<String>> subSetsIteratorPeopleCwids = peopleCwidsSubSets.iterator();
 		    while (subSetsIteratorPeopleCwids.hasNext()) {
                 List<String> subsetPeoples = subSetsIteratorPeopleCwids.next();
-                appointmentsFetchFromED.execute(subsetPeoples);
-                grantsFetchFromED.execute(subsetPeoples);
+
+                //appointmentsFetchFromED.execute(subsetPeoples);
+                //grantsFetchFromED.execute(subsetPeoples);
+                try{
+                    StopWatch stopWatch = new StopWatch("Getting Publications from ReCiter");
+                    stopWatch.start("Getting Publications from ReCiter");
+                    log.info("Getting publications for group : " + subsetPeoples.toString());
+                    List<ArticleRetrievalModel> allPubs = reCiterClient
+                                .getPublicationsByGroup(subsetPeoples)
+                                .collectList()
+                                .block();
+                    stopWatch.stop();
+		            log.info("Publications fetch Time taken: " + stopWatch.getTotalTimeSeconds() + "s");
+                    vivoPublicationsService.isPublicationsExist(allPubs);
+                } catch(Exception e) {
+                 log.error("Exception", e); 
+                }
             }
             /* List<List<PeopleBean>> peopleSubSets = Lists.partition(people, 10);
             Iterator<List<PeopleBean>> subSetsIteratorPeople = peopleSubSets.iterator();
