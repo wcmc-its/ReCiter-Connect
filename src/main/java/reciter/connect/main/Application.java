@@ -122,11 +122,11 @@ public class Application implements ApplicationRunner {
         AppointmentsFetchFromED appointmentsFetchFromED = context.getBean(AppointmentsFetchFromED.class);
         ReCiterClient reCiterClient = context.getBean(ReCiterClient.class);
 
-        //ExecutorService executor = Executors.newFixedThreadPool(25);
+        ExecutorService executor = Executors.newFixedThreadPool(25);
 
         try {
             List<PeopleBean> people = academicFetchFromED.getActivePeopleFromED();
-            List<List<PeopleBean>> peopleSubSets = Lists.partition(people, 10);
+            /* List<List<PeopleBean>> peopleSubSets = Lists.partition(people, 10);
             Iterator<List<PeopleBean>> subSetsIteratorPeople = peopleSubSets.iterator();
             while (subSetsIteratorPeople.hasNext()) {
                 List<PeopleBean> subsetPeoples = subSetsIteratorPeople.next();
@@ -155,14 +155,14 @@ public class Application implements ApplicationRunner {
                 } catch(Exception e) {
                  log.error("Exception", e); 
                 }
-            }
-            /* List<List<PeopleBean>> peopleSubSets = Lists.partition(people, 10);
+            } */
+            List<List<PeopleBean>> peopleSubSets = Lists.partition(people, 10);
             Iterator<List<PeopleBean>> subSetsIteratorPeople = peopleSubSets.iterator();
             while (subSetsIteratorPeople.hasNext()) {
                 List<PeopleBean> subsetPeoples = subSetsIteratorPeople.next();
                 List<Callable<String>> callables = new ArrayList<>();
                 for(PeopleBean peopleSubset: subsetPeoples) {
-                    callables.add(academicFetchFromED.getCallable(Arrays.asList(peopleSubset)));
+                    //callables.add(academicFetchFromED.getCallable(Arrays.asList(peopleSubset)));
                 }
                 log.info("People fetch will run for " + subsetPeoples.toString());
                 try {
@@ -183,14 +183,26 @@ public class Application implements ApplicationRunner {
             }
             List<String> peopleCwids = people.stream().map(PeopleBean::getCwid).collect(Collectors.toList());
             
-            List<List<String>> peopleCwidsSubSets = Lists.partition(peopleCwids, 10);
+            List<List<String>> peopleCwidsSubSets = Lists.partition(peopleCwids, 5);
             Iterator<List<String>> subSetsIteratorPeopleCwids = peopleCwidsSubSets.iterator();
 		    while (subSetsIteratorPeopleCwids.hasNext()) {
                 List<String> subsetPeoples = subSetsIteratorPeopleCwids.next();
                 List<Callable<String>> callables = new ArrayList<>();
-                for(String peopleSubset: subsetPeoples) {
-                    callables.add(appointmentsFetchFromED.getCallable(Arrays.asList(peopleSubset)));
-                    callables.add(grantsFetchFromED.getCallable(Arrays.asList(peopleSubset)));
+                //callables.add(appointmentsFetchFromED.getCallable(subsetPeoples));
+                //callables.add(grantsFetchFromED.getCallable(subsetPeoples));
+                try{
+                    StopWatch stopWatch = new StopWatch("Getting Publications from ReCiter");
+                    stopWatch.start("Getting Publications from ReCiter");
+                    log.info("Getting publications for group : " + subsetPeoples.toString());
+                    List<ArticleRetrievalModel> allPubs = reCiterClient
+                                .getPublicationsByGroup(subsetPeoples)
+                                .collectList()
+                                .block();
+                    stopWatch.stop();
+                    log.info("Publications fetch Time taken: " + stopWatch.getTotalTimeSeconds() + "s");
+                    callables.add(vivoPublicationsService.getCallable(allPubs));
+                } catch(Exception e) {
+                    log.error("Exception", e); 
                 }
                 log.info("Appointment & Grant fetch will run for " + subsetPeoples.toString());
                 try {
@@ -208,7 +220,7 @@ public class Application implements ApplicationRunner {
                     log.error("Unable to invoke callable.", e);
                 }
                 callables.clear();
-            } */
+            } 
             
 
         } catch (Exception e) {

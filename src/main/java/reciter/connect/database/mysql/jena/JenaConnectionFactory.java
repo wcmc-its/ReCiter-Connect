@@ -82,12 +82,6 @@ public class JenaConnectionFactory {
 	private void initializeConnectionPool() {
 		while(!checkIfConnectionPoolIsFull()) {
 			log.info("Jena pool is not full. Proceeding with adding new connection");
-			this.connectionPool.put(createNewConnectionForPool(VivoGraphs.PEOPLE_GRAPH.getValue()),"wcmcPeople");
-			this.connectionPool.put(createNewConnectionForPool(VivoGraphs.OFA_GRAPH.getValue()),"wcmcOfa");
-			this.connectionPool.put(createNewConnectionForPool(VivoGraphs.INFOED_GRAPH.getValue()),"wcmcCoeus");
-			this.connectionPool.put(createNewConnectionForPool(VivoGraphs.PUBLICATIONS_GRAPH.getValue()),"wcmcPublications");
-			this.connectionPool.put(createNewConnectionForPool(VivoGraphs.VITRO_KB_INF_GRAPH.getValue()),"vitro-kb-inf");
-			this.connectionPool.put(createNewConnectionForPool(VivoGraphs.DEFAULT_KB_2_GRAPH.getValue()),"vitro-kb-2");
 			this.connectionPool.put(createNewDataSetConnectionForPool(),"dataSet");
 		}
 		log.info("Jena connection pool is full");
@@ -98,7 +92,7 @@ public class JenaConnectionFactory {
 	 * @return boolean
 	 */
 	private synchronized boolean checkIfConnectionPoolIsFull() {
-		final int MAX_POOL_SIZE = 8;
+		final int MAX_POOL_SIZE = 35;
 		if(this.connectionPool.size()<MAX_POOL_SIZE)
 			return false;
 		else

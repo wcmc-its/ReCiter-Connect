@@ -137,21 +137,22 @@ public class GrantsFetchFromED {
 		private void checkGrantExistInVivo(List<GrantBean> grants, String cwid) {
 			SDBJenaConnect vivoJena = null;
 			for(int i=0; i< grants.size(); i++) {
-				vivoJena = this.jcf.getConnectionfromPool("wcmcCoeus");
+				vivoJena = this.jcf.getConnectionfromPool("dataSet");
 				String sparqlQuery = "PREFIX rdf:      <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 					 "PREFIX foaf:     <http://xmlns.com/foaf/0.1/> \n" +
 					 "SELECT  (count(?o) as ?grant) \n" +
 					 //"FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> \n" +
 					 "WHERE \n" +
 					 "{ \n" +
+					 "GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> {\n" +
 					 "<" + this.vivoNamespace + "grant-" + grants.get(i).getAwardNumber().trim() + "> ?p ?o . \n" +
-					 "}";
+					 "}}";
 				
 				
 				log.info("Checking grant " + grants.get(i));
 				log.info(sparqlQuery);
 				try {
-					ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery);
+					ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery, true);
 					
 					QuerySolution qs = rs.nextSolution();
 					
@@ -159,12 +160,12 @@ public class GrantsFetchFromED {
 					int count = Integer.parseInt(qs.get("grant").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
 					if(count > 0) {
 						log.info("Grant- " + grants.get(i).getAwardNumber() + " exists in VIVO");
-						this.jcf.returnConnectionToPool(vivoJena, "wcmcCoeus");
+						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 						//This is done to return the connection for coeus since it is being used again in the update function
 						checkForUpdates(grants.get(i), cwid, "UPDATE");
 					}
 					else {
-						this.jcf.returnConnectionToPool(vivoJena, "wcmcCoeus");
+						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 						insertGrantsInVivo(grants.get(i),cwid,"INSERT");
 						this.insertCount = this.insertCount + 1;
 					}
@@ -190,7 +191,7 @@ public class GrantsFetchFromED {
 			DateFormat shortFormat = new SimpleDateFormat("yyyy-MM-dd",Locale.ENGLISH);
 			DateFormat mediumFormat = new SimpleDateFormat("dd-MMM-yy",Locale.ENGLISH);
 			DateFormat yearFormat = new SimpleDateFormat("yyyy",Locale.ENGLISH);
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcCoeus");
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 			//get contributor list & date interval for that grant from VIVO
 			StringBuilder sb = new StringBuilder();
 			sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
@@ -198,16 +199,16 @@ public class GrantsFetchFromED {
 			sb.append("PREFIX foaf: <http://xmlns.com/foaf/0.1/> \n");
 			sb.append("select ?person ?dateTimeInterval \n");
 			sb.append("where { \n");
-			//sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> {\n");
+			sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> {\n");
 			sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:relates ?person . \n");
 			sb.append("?person rdf:type foaf:Person . \n");
 			sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:dateTimeInterval ?dateTimeInterval . \n");
-			sb.append("}");
+			sb.append("}}");
 			
 			log.info(sb.toString());
 			
 			try{
-				ResultSet rs = vivoJena.executeSelectQuery(sb.toString());
+				ResultSet rs = vivoJena.executeSelectQuery(sb.toString(), true);
 				while(rs.hasNext()) {
 					QuerySolution qs = rs.nextSolution();
 					contributors.add(qs.get("person").toString().replace(this.vivoNamespace + "cwid-", "").trim());
@@ -600,7 +601,7 @@ public class GrantsFetchFromED {
 			else
 				log.info("No updates are necessary for grant-" + gb.getAwardNumber());
 			
-			this.jcf.returnConnectionToPool(vivoJena, "wcmcCoeus");
+			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			checkForSponsorUpdate(gb);
 		}
 		
@@ -609,8 +610,7 @@ public class GrantsFetchFromED {
 		 * @param gb
 		 */
 		private void checkForSponsorUpdate(GrantBean gb) {	
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcCoeus");
-			SDBJenaConnect vivoKbInf = this.jcf.getConnectionfromPool("vitro-kb-inf");		
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");		
 			//get contributor list & date interval for that grant from VIVO
 			StringBuilder sb = new StringBuilder();
 			sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
@@ -618,14 +618,14 @@ public class GrantsFetchFromED {
 			sb.append("PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n");
 			sb.append("select ?fundingOrganization ?fundingOrganizationLabel \n");
 			sb.append("where { \n");
-			//sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> {\n");
+			sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> {\n");
 			sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:assignedBy ?fundingOrganization . \n");
 			sb.append("?fundingOrganization rdf:type core:FundingOrganization . \n");
 			sb.append("?fundingOrganization rdfs:label ?fundingOrganizationLabel . \n");
-			sb.append("}");
+			sb.append("}}");
 			
 			try{
-				ResultSet rs = vivoJena.executeSelectQuery(sb.toString());
+				ResultSet rs = vivoJena.executeSelectQuery(sb.toString(), true);
 				while(rs.hasNext()) {
 					QuerySolution qs = rs.nextSolution();
 					if(qs.get("fundingOrganization") != null && qs.get("fundingOrganizationLabel") != null) {
@@ -705,7 +705,7 @@ public class GrantsFetchFromED {
 								sb.append("<" + this.vivoNamespace + "org-f" + gb.getSponsorCode() + "> vitro:mostSpecificType core:FundingOrganization . \n");
 								sb.append("}}");
 								
-								vivoKbInf.executeUpdateQuery(sb.toString(), true);
+								vivoJena.executeUpdateQuery(sb.toString(), true);
 							}
 						}
 					}
@@ -714,8 +714,7 @@ public class GrantsFetchFromED {
 			} catch(IOException e) {
 				log.error("IOException" ,e);
 			}
-			this.jcf.returnConnectionToPool(vivoKbInf, "vitro-kb-inf");
-			this.jcf.returnConnectionToPool(vivoJena, "wcmcCoeus");
+			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 		}
 		
 		/**
@@ -726,8 +725,8 @@ public class GrantsFetchFromED {
 		private void deleteConfidentialGrants(List<GrantBean> grants, String cwid) {
 			
 			SDBJenaConnect vivoJena = null;
-			vivoJena = this.jcf.getConnectionfromPool("wcmcCoeus");
-			SDBJenaConnect vivoKbInf = this.jcf.getConnectionfromPool("vitro-kb-inf");
+			vivoJena = this.jcf.getConnectionfromPool("dataSet");
+			SDBJenaConnect vivoKbInf = this.jcf.getConnectionfromPool("dataSet");
 			List<String> vivoGrants = new ArrayList<String>();
 			List<String> infoEdgrants = grants.stream().map(grant -> grant.getAwardNumber()).collect(Collectors.toList());
 			
@@ -740,15 +739,15 @@ public class GrantsFetchFromED {
 			sb.append("PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n");
 			sb.append("select ?grant \n");
 			sb.append("where { \n");
-			//sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> {\n");
+			sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> {\n");
 			sb.append("<" + this.vivoNamespace + "cwid-" + cwid.trim() + "> core:relatedBy ?grant . \n");
 			sb.append("?grant rdf:type core:Grant . \n");
-			sb.append("}");
+			sb.append("}}");
 			
 			//log.info(sb.toString());
 			
 			try{
-				ResultSet rs = vivoJena.executeSelectQuery(sb.toString());
+				ResultSet rs = vivoJena.executeSelectQuery(sb.toString(), true);
 				while(rs.hasNext()) {
 					QuerySolution qs = rs.nextSolution();
 					if(qs.get("grant") != null) {
@@ -785,7 +784,7 @@ public class GrantsFetchFromED {
 					sb.append("}");
 					
 					try{
-						ResultSet rs = vivoJena.executeSelectQuery(sb.toString());
+						ResultSet rs = vivoJena.executeSelectQuery(sb.toString(), true);
 						while(rs.hasNext()) {
 							QuerySolution qs = rs.nextSolution();
 							if(qs.get("role") != null && qs.get("cwid") != null) {
@@ -884,8 +883,8 @@ public class GrantsFetchFromED {
 			} else {
 				log.info("No confidential grants in VIVO for cwid: " + cwid);
 			}
-			this.jcf.returnConnectionToPool(vivoKbInf, "vitro-kb-inf");
-			this.jcf.returnConnectionToPool(vivoJena, "wcmcCoeus");
+			this.jcf.returnConnectionToPool(vivoKbInf, "dataSet");
+			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 		}
 		
 		
@@ -1435,14 +1434,14 @@ public class GrantsFetchFromED {
 			
 			sb.append("}}");
 			log.info(sb.toString());
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcCoeus");
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 			try {
 				vivoJena.executeUpdateQuery(sb.toString(), true);
 				
 			} catch(IOException e) {
 				log.error("IOException" ,e);
 			}
-			this.jcf.returnConnectionToPool(vivoJena, "wcmcCoeus");
+			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			insertInferenceTriples(gb, crudStatus);
 			log.info("Successful insertion of grant-" + gb.getAwardNumber() + " for cwid: " + cwid);
 		}
@@ -1550,7 +1549,7 @@ public class GrantsFetchFromED {
 			}
 			sb.append("}}");
 			
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("vitro-kb-inf");
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 			log.info("Inserting inference triples for grant-" + gb.getAwardNumber());
 			try {
 				vivoJena.executeUpdateQuery(sb.toString(), true);
@@ -1558,7 +1557,7 @@ public class GrantsFetchFromED {
 			} catch(IOException e) {
 				log.error("IOException" ,e);
 			}
-			this.jcf.returnConnectionToPool(vivoJena, "vitro-kb-inf");
+			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 		}
 		
 		

@@ -648,13 +648,13 @@ public class AppointmentsFetchFromED {
 			sb.append("}}");
 			
 			
-			log.info(sb.toString());
+			//log.info(sb.toString());
 			
 			try {
-				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
+				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 				runSparqlUpdateTemplate(sb.toString(), vivoJena);
 				if(vivoJena != null)
-					this.jcf.returnConnectionToPool(vivoJena, "wcmcOfa");
+					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			} catch(IOException e) {
 				log.error("Exception in connecting to Jena" ,e);
 			}
@@ -724,10 +724,10 @@ public class AppointmentsFetchFromED {
 			if(insertCount > 0 ) {
 				log.info("Inserting inference triples for " + ob.getCwid());
 				try {
-					SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("vitro-kb-inf");
+					SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 					runSparqlUpdateTemplate(sb.toString(), vivoJena);
 					if(vivoJena != null)
-						this.jcf.returnConnectionToPool(vivoJena, "vitro-kb-inf");
+						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 				} catch(IOException e) {
 					log.error("Exception in connecting to Jena" ,e);
 				}
@@ -757,12 +757,12 @@ public class AppointmentsFetchFromED {
 			for(RoleBean role: rb) {
 				StringBuffer sb = new StringBuffer();
 				sb.append("SELECT ?obj \n");
-				//sb.append("FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");
 				sb.append("WHERE {\n");
+				sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> {\n");
 				sb.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> <http://vivoweb.org/ontology/core#dateTimeInterval> ?obj . \n");
-				sb.append("}");
+				sb.append("}}");
 				
-				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
+				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 				
 				ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
 				
@@ -982,7 +982,7 @@ public class AppointmentsFetchFromED {
 				}
 				//Close the connection
 				if(vivoJena != null)
-					this.jcf.returnConnectionToPool(vivoJena, "wcmcOfa");
+					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			}
 			//Checking for education and training updates
 			for(EducationBean edu: ebean) {
@@ -990,14 +990,14 @@ public class AppointmentsFetchFromED {
 				
 				sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
 				sb.append("SELECT ?obj \n");
-				//sb.append("FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");
 				sb.append("WHERE { \n");
+				sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> {\n");
 				sb.append("<" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> core:relatedBy <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + ">");
-				sb.append("}");
+				sb.append("}}");
 				
 				//log.info(sb.toString());
 				
-				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
+				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 				
 				ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
 				
@@ -1070,10 +1070,10 @@ public class AppointmentsFetchFromED {
 					sb.setLength(0);
 					sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
 					sb.append("SELECT ?instituteFk \n");
-					//sb.append("FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");
 					sb.append("WHERE { \n");
+					sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> {\n");
 					sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> core:assignedBy ?instituteFk");
-					sb.append("}");
+					sb.append("}}");
 					
 					rs = runSparqlTemplate(sb.toString(), vivoJena);
 					
@@ -1108,7 +1108,7 @@ public class AppointmentsFetchFromED {
 						sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0000057 <" + this.vivoNamespace + "org-" + instituteFk + "> . \n");
 						sb.append("}");
 						
-						log.info(sb.toString());
+						//log.info(sb.toString());
 						try {
 							runSparqlUpdateTemplate(sb.toString(), vivoJena);
 						} catch(IOException e) {
@@ -1121,7 +1121,7 @@ public class AppointmentsFetchFromED {
 				}
 				//Close the connection
 				if(vivoJena != null)
-					this.jcf.returnConnectionToPool(vivoJena, "wcmcOfa");
+					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 				
 			}
 			
@@ -1151,8 +1151,8 @@ public class AppointmentsFetchFromED {
 			sb.append("PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n");
 			sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
 			sb.append("SELECT ?position ?org ?start ?end ?dateTime \n");
-			//sb.append("FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");
 			sb.append("WHERE {\n");
+			sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> {\n");
 			sb.append("<" + this.vivoNamespace + "cwid-" + cwid + "> core:relatedBy ?position . \n");
 			sb.append("?position a core:Position . \n");
 			sb.append("?position core:relates ?org . \n");
@@ -1161,10 +1161,10 @@ public class AppointmentsFetchFromED {
 			sb.append("OPTIONAL {?dateTime a core:DateTimeInterval . }\n");
 			sb.append("OPTIONAL {?dateTime core:start ?start . }\n");
 			sb.append("OPTIONAL {?dateTime core:end ?end . }\n");
-			sb.append("}");
+			sb.append("}}");
 
 			
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 			
 			try {
 				ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
@@ -1199,7 +1199,7 @@ public class AppointmentsFetchFromED {
 				// TODO Auto-generated catch block
 				log.error("IOException" ,e);
 			}
-			this.jcf.returnConnectionToPool(vivoJena, "wcmcOfa");
+			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			for(RoleBean r: vivoRole) {
 				//try{
 					//log.info(r.toString());
@@ -1320,7 +1320,7 @@ public class AppointmentsFetchFromED {
 						
 						log.info(sb.toString());
 						
-						vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
+						vivoJena = this.jcf.getConnectionfromPool("dataSet");
 						
 						try {
 							runSparqlUpdateTemplate(sb.toString(), vivoJena);
@@ -1328,7 +1328,7 @@ public class AppointmentsFetchFromED {
 							// TODO Auto-generated catch block
 							log.error("IOException" ,e);
 						}
-						this.jcf.returnConnectionToPool(vivoJena, "wcmcOfa");
+						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 						//Delete from inference Graph
 						
 						
@@ -1352,7 +1352,7 @@ public class AppointmentsFetchFromED {
 						
 						log.info(sb.toString());
 						
-						vivoJena = this.jcf.getConnectionfromPool("vitro-kb-inf");
+						vivoJena = this.jcf.getConnectionfromPool("dataSet");
 						
 						try {
 							runSparqlUpdateTemplate(sb.toString(), vivoJena);
@@ -1360,7 +1360,7 @@ public class AppointmentsFetchFromED {
 							// TODO Auto-generated catch block
 							log.error("IOException" ,e);
 						}
-						this.jcf.returnConnectionToPool(vivoJena, "vitro-kb-inf");
+						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 						
 					}
 				/*}
@@ -1383,17 +1383,17 @@ public class AppointmentsFetchFromED {
 			sb.append("SELECT  (count(?o) as ?positionCount) \n");
 			sb.append("WHERE \n");
 			sb.append("{ \n");
-			//sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> { \n");
+			sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> { \n");
 			sb.append("<" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> ?p ?o . \n");
-			sb.append("}");
+			sb.append("}}");
 			
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 			ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
 			QuerySolution qs = rs.nextSolution();
 			count = Integer.parseInt(qs.get("positionCount").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
 			//Close the connection
 			if(vivoJena!= null)
-				this.jcf.returnConnectionToPool(vivoJena, "wcmcOfa");
+				this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			if(count > 0)
 				return true;
 			
@@ -1408,7 +1408,7 @@ public class AppointmentsFetchFromED {
 		 * @throws IOException default exception thrown
 		 */
 		private ResultSet runSparqlTemplate(String sparqlQuery, SDBJenaConnect vivoJena) throws IOException {		
-			return vivoJena.executeSelectQuery(sparqlQuery);
+			return vivoJena.executeSelectQuery(sparqlQuery, true);
 		}
 		
 		/**

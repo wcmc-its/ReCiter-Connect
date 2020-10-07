@@ -292,12 +292,12 @@ public class AcademicFetchFromED {
 			}
 			sb.append("}}");
 			
-			log.info(sb.toString());
+			//log.info(sb.toString());
 			try {
-				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
+				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 				runSparqlUpdateTemplate(sb.toString(), vivoJena);
 				if(vivoJena != null)
-					this.jcf.returnConnectionToPool(vivoJena, "wcmcPeople");
+					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			} catch(IOException e) {
 				log.error("Error connecting to Jena database", e);
 			}
@@ -346,7 +346,7 @@ public class AcademicFetchFromED {
 			sb.append("<" + this.vivoNamespace + "arg2000028-"  + pb.getCwid().trim() + "> vitro:mostSpecificType vcard:Individual . \n");
 			sb.append("}}");
 			
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("vitro-kb-inf");
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 
 			try{
 				vivoJena.executeUpdateQuery(sb.toString(),true);
@@ -355,7 +355,7 @@ public class AcademicFetchFromED {
 				log.error("Error connecting to Jena Database", e);
 			}
 			if(vivoJena != null)
-				this.jcf.returnConnectionToPool(vivoJena, "vitro-kb-inf");
+				this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 		}
 		
 		/**
@@ -495,19 +495,20 @@ public class AcademicFetchFromED {
 									"PREFIX foaf:     <http://xmlns.com/foaf/0.1/> \n" +
 									"SELECT  (count(rdf:type) as ?c) \n" +
 									"WHERE {\n" +
+									"GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> {\n" +
 									"<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> rdf:type foaf:Person . \n" +
-									"}";
+									"}}";
 
 			log.info(sparqlQuery);
 
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 			
 			ResultSet rs = runSparqlTemplate(sparqlQuery, vivoJena);
 			
 			QuerySolution qs = rs.nextSolution();
 			count = Integer.parseInt(qs.get("c").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
 			if(vivoJena != null)
-				this.jcf.returnConnectionToPool(vivoJena, "wcmcPeople");
+				this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 
 			if(count > 0)
 				return true;
@@ -531,7 +532,7 @@ public class AcademicFetchFromED {
 					"SELECT ?label ?type ?phone ?title ?email ?firstName ?lastName ?middleName ?popsUrl\n" +
 					"WHERE \n" +
 					"{ \n" +
-					//"GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> {\n" +
+					"GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> {\n" +
 					"<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:personLabel ?label .\n" +
 					"<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> vitro:mostSpecificType ?type .\n" +
 					"<" + this.vivoNamespace + "hasTitle-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#title> ?title . \n" +
@@ -541,12 +542,12 @@ public class AcademicFetchFromED {
 					"OPTIONAL { <" + this.vivoNamespace + "hasEmail-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#email> ?email . }\n" +
 					"OPTIONAL { <" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> core:middleName ?middleName . }\n" +
 					"OPTIONAL { <" + this.vivoNamespace + "popsUrl-" + pb.getCwid().trim() + "> vcard:url ?popsUrl } \n" +
-					"}";
+					"}}";
 			
 			log.debug(sparqlQuery);
 			SDBJenaConnect vivoJena;
 			try {
-				vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
+				vivoJena = this.jcf.getConnectionfromPool("dataSet");
 				ResultSet rs = runSparqlTemplate(sparqlQuery, vivoJena);
 				QuerySolution qs = null;
 					if(rs.hasNext()) {
@@ -712,7 +713,7 @@ public class AcademicFetchFromED {
 						
 						if(!updateList.isEmpty() && updateList.contains("MostSpecificType")) {
 							log.info("Updating inference triple for mostSpecificType update");
-							SDBJenaConnect vivoJenaInf = this.jcf.getConnectionfromPool("vitro-kb-inf");
+							SDBJenaConnect vivoJenaInf = this.jcf.getConnectionfromPool("dataSet");
 							sb.setLength(0);
 							
 							sb.append("PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n");
@@ -729,7 +730,7 @@ public class AcademicFetchFromED {
 			                
 			                log.info("Update Query for person type: " + sb.toString());
 							runSparqlUpdateTemplate(sb.toString(), vivoJenaInf);
-							this.jcf.returnConnectionToPool(vivoJenaInf, "vitro-kb-inf");
+							this.jcf.returnConnectionToPool(vivoJenaInf, "dataSet");
 						}
 					}
 					
@@ -773,7 +774,7 @@ public class AcademicFetchFromED {
 		                runSparqlUpdateTemplate(sb.toString(), vivoJena);
 	                }
 					if(vivoJena!= null)
-						this.jcf.returnConnectionToPool(vivoJena, "wcmcPeople");
+						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 					//Run inferencing on the updated triples
 					insertInferenceTriples(pb);
 	                
@@ -823,14 +824,14 @@ public class AcademicFetchFromED {
             sb.append("}");
 			
             log.info(sb.toString());
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 			try {
 				runSparqlUpdateTemplate(sb.toString(), vivoJena);
 			} catch(IOException e) {
 				log.error("IOException: ",e);
 			}
 			if(vivoJena!= null)
-				this.jcf.returnConnectionToPool(vivoJena, "wcmcPeople");
+				this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 		}
 
 		/**
@@ -840,7 +841,7 @@ public class AcademicFetchFromED {
 		 * @throws IOException default exception thrown
 		 */
 		private ResultSet runSparqlTemplate(String sparqlQuery, SDBJenaConnect vivoJena) throws IOException {
-			ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery);		
+			ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery, true);		
 			return rs;
 		}
 		

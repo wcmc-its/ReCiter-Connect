@@ -8,6 +8,7 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 
 import org.apache.commons.codec.digest.DigestUtils;
@@ -44,15 +45,14 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
     private VivoClient vivoClient;
 
     @Override
-    public void importPublications(List<ReCiterArticleFeature> articles, String uid, String dateUpdated) {
+    public void importPublications(List<ReCiterArticleFeature> articles, String uid, String dateUpdated, SDBJenaConnect vivoJena) {
         StopWatch stopWatch = new StopWatch("Publications import to VIVO");
         stopWatch.start("Publications import to VIVO");
         StringBuilder sb = new StringBuilder();
-        StringBuilder inf = new StringBuilder();
+        //StringBuilder inf = new StringBuilder();
         sb.append(QueryConstants.getSparqlPrefixQuery());
-        inf.append(QueryConstants.getSparqlPrefixQuery());
         sb.append("INSERT DATA { GRAPH <" + VivoGraphs.PUBLICATIONS_GRAPH + ">{ \n");
-        inf.append("INSERT DATA { GRAPH <" + VivoGraphs.PUBLICATIONS_GRAPH + ">{ \n");
+        //inf.append("INSERT DATA { GRAPH <" + VivoGraphs.VITRO_KB_INF_GRAPH + ">{ \n");
         for (ReCiterArticleFeature articleFeature : articles) {
             final String publicationUrl = "<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid()
                     + ">";
@@ -65,13 +65,13 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
             if (articleFeature.getPublicationAbstract() != null
                     && !articleFeature.getPublicationAbstract().isEmpty()) {
                 sb.append(publicationUrl + " bibo:abstract \""
-                        + articleFeature.getPublicationAbstract().trim().replaceAll("([\\\\\\\\\"])", "\\\\$1").replaceAll("'", "\'")
+                        + articleFeature.getPublicationAbstract().trim().replaceAll("([\\\\\\\\\"])", "\\\\$1").replaceAll("'", "\'").replaceAll("\"","\\\"").replaceAll("(\\r|\\n|\\r\\n)+", "\\\\n")
                         + "\" .\n");
             }
             // articleTitle → rdfs:label
             if (articleFeature.getArticleTitle() != null) {
                 sb.append(publicationUrl + " rdfs:label \""
-                        + articleFeature.getArticleTitle().trim().replaceAll("([\\\\\\\\\"])", "\\\\$1").replaceAll("'", "\'")
+                        + articleFeature.getArticleTitle().trim().replaceAll("([\\\\\\\\\"])", "\\\\$1").replaceAll("'", "\'").replaceAll("\"","\\\"").replaceAll("(\\r|\\n|\\r\\n)+", "\\\\n")
                         + "\" .\n");
             }
             // doi → bibo:doi
@@ -103,7 +103,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                 sb.append(publicationUrl + " bibo:pages \"" + articleFeature.getPages() + "\" .\n");
             }
             // timesCited
-            if (articleFeature.getTimesCited() != null && articleFeature.getTimesCited() > 0) {
+            if (articleFeature.getTimesCited() != null && articleFeature.getTimesCited() > 0 && !dateUpdated.isEmpty()) {
                 Date citationDate = null;
                 try {
                     citationDate = this.sdf.parse(dateUpdated);
@@ -203,9 +203,9 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
             sb.append("<" + JenaConnectionFactory.nameSpace + "journal"
                     + journalIdentifier + "> vitro:mostSpecificType bibo:Journal . \n");
             sb.append("<" + JenaConnectionFactory.nameSpace + "journal"
-                    + journalIdentifier + "> core:title \"" + articleFeature.getJournalTitleVerbose().replaceAll("'", "\'") + "\" . \n");
+                    + journalIdentifier + "> core:title \"" + articleFeature.getJournalTitleVerbose().replaceAll("'", "\'").replaceAll("\"","\\\\\"") + "\" . \n");
             sb.append("<" + JenaConnectionFactory.nameSpace + "journal"
-                    + journalIdentifier + "> rdfs:label \"" + articleFeature.getJournalTitleVerbose().replaceAll("'", "\'") + "\" . \n");
+                    + journalIdentifier + "> rdfs:label \"" + articleFeature.getJournalTitleVerbose().replaceAll("'", "\'").replaceAll("\"","\\\\\"") + "\" . \n");
             if (articleFeature.getJournalTitleISOabbreviation() != null)
                 sb.append("<" + JenaConnectionFactory.nameSpace + "journal"
                     + journalIdentifier + "> wcmc:ISOAbbreviation \"" + articleFeature.getJournalTitleISOabbreviation().trim()
@@ -221,62 +221,62 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                 if(articleFeature.getPublicationType().getPublicationTypeCanonical().equalsIgnoreCase("Editorial Article")) {
                     sb.append(publicationUrl + " rdf:type core:EditorialArticle . \n");
                     sb.append(publicationUrl + " vitro:mostSpecificType core:EditorialArticle . \n");
-                    inf.append(publicationUrl + " vitro:mostSpecificType core:EditorialArticle . \n");
-                    inf.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+                    sb.append(publicationUrl + " vitro:mostSpecificType core:EditorialArticle . \n");
+                    sb.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
                 }
                 else if(articleFeature.getPublicationType().getPublicationTypeCanonical().equalsIgnoreCase("Letter")) {
                     sb.append(publicationUrl + " rdf:type fabio:Letter . \n");
                     sb.append(publicationUrl + " vitro:mostSpecificType fabio:Letter . \n");
-                    inf.append(publicationUrl + " vitro:mostSpecificType fabio:Letter . \n");
-                    inf.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+                    sb.append(publicationUrl + " vitro:mostSpecificType fabio:Letter . \n");
+                    sb.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
                 }
                 else if(articleFeature.getPublicationType().getPublicationTypeCanonical().equalsIgnoreCase("Conference Paper")) {
                     sb.append(publicationUrl + " rdf:type core:ConferencePaper . \n");
                     sb.append(publicationUrl + " vitro:mostSpecificType core:ConferencePaper . \n");
-                    inf.append(publicationUrl + " vitro:mostSpecificType core:ConferencePaper . \n");
-                    inf.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+                    sb.append(publicationUrl + " vitro:mostSpecificType core:ConferencePaper . \n");
+                    sb.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
                 }
                 else if(articleFeature.getPublicationType().getPublicationTypeCanonical().equalsIgnoreCase("Review")) {
                     sb.append(publicationUrl + " rdf:type core:Review . \n");
                     sb.append(publicationUrl + " vitro:mostSpecificType core:Review . \n");
-                    inf.append(publicationUrl + " vitro:mostSpecificType core:Review . \n");
-                    inf.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+                    sb.append(publicationUrl + " vitro:mostSpecificType core:Review . \n");
+                    sb.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
                 }
                 else if(articleFeature.getPublicationType().getPublicationTypeCanonical().equalsIgnoreCase("Academic Article")) {
                     sb.append(publicationUrl + " rdf:type bibo:AcademicArticle . \n");
                     sb.append(publicationUrl + " vitro:mostSpecificType bibo:AcademicArticle . \n");
-                    inf.append(publicationUrl + " vitro:mostSpecificType bibo:AcademicArticle . \n");
-                    inf.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+                    sb.append(publicationUrl + " vitro:mostSpecificType bibo:AcademicArticle . \n");
+                    sb.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
                 }
                 else if(articleFeature.getPublicationType().getPublicationTypeCanonical().equalsIgnoreCase("Article")) {
                     sb.append(publicationUrl + " rdf:type bibo:Article . \n");
                     sb.append(publicationUrl + " vitro:mostSpecificType bibo:Article . \n");
-                    inf.append(publicationUrl + " vitro:mostSpecificType bibo:Article . \n");
-                    inf.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+                    sb.append(publicationUrl + " vitro:mostSpecificType bibo:Article . \n");
+                    sb.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
                 }
                 else if(articleFeature.getPublicationType().getPublicationTypeCanonical().equalsIgnoreCase("Comment")) {
                     sb.append(publicationUrl + " rdf:type fabio:Comment . \n");
                     sb.append(publicationUrl + " vitro:mostSpecificType fabio:Comment . \n");
-                    inf.append(publicationUrl + " vitro:mostSpecificType fabio:Comment . \n");
-                    inf.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+                    sb.append(publicationUrl + " vitro:mostSpecificType fabio:Comment . \n");
+                    sb.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
                 }
                 else if(articleFeature.getPublicationType().getPublicationTypeCanonical().equalsIgnoreCase("In Process")) {
                     sb.append(publicationUrl + " rdf:type wcmc:InProcess . \n");
                     sb.append(publicationUrl + " vitro:mostSpecificType wcmc:InProcess . \n");
-                    inf.append(publicationUrl + " vitro:mostSpecificType wcmc:InProcess . \n");
-                    inf.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+                    sb.append(publicationUrl + " vitro:mostSpecificType wcmc:InProcess . \n");
+                    sb.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
                 }
                 else if(articleFeature.getPublicationType().getPublicationTypeCanonical().equalsIgnoreCase("PubMed.ConferencePaper")) {
                     sb.append(publicationUrl + " rdf:type core:ConferencePaper . \n");
                     sb.append(publicationUrl + " vitro:mostSpecificType core:ConferencePaper . \n");
-                    inf.append(publicationUrl + " vitro:mostSpecificType core:ConferencePaper . \n");
-                    inf.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+                    sb.append(publicationUrl + " vitro:mostSpecificType core:ConferencePaper . \n");
+                    sb.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
                 }
                 else if(articleFeature.getPublicationType().getPublicationTypeCanonical().equalsIgnoreCase("Report")) {
                     sb.append(publicationUrl + " rdf:type bibo:Report . \n");
                     sb.append(publicationUrl + " vitro:mostSpecificType bibo:Report . \n");
-                    inf.append(publicationUrl + " vitro:mostSpecificType bibo:Report . \n");
-                    inf.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+                    sb.append(publicationUrl + " vitro:mostSpecificType bibo:Report . \n");
+                    sb.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
                 }
             }
             //Author Assignment
@@ -304,7 +304,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                         sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + reCiterArticleAuthorFeature.getRank() + "> core:relates <" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> . \n");
                         sb.append("<" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> obo:ARG_2000029 <" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + reCiterArticleAuthorFeature.getRank() + "> . \n");
                         sb.append("<" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> core:relatedBy <" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + reCiterArticleAuthorFeature.getRank() + "> . \n");
-                        inf.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + reCiterArticleAuthorFeature.getRank() + "> obo:ARG_2000028 <" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> . \n");
+                        sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + reCiterArticleAuthorFeature.getRank() + "> obo:ARG_2000028 <" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> . \n");
                     } else {
                         String personIdentifier = getExternalPersonIdentifier(reCiterArticleAuthorFeature);
                         sb.append(publicationUrl + " core:relatedBy <" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + reCiterArticleAuthorFeature.getRank() + "> . \n");
@@ -349,31 +349,17 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
         }
         
         sb.append("}}");
-        inf.append("}}");
-        log.debug(sb.toString());
-        log.debug(inf.toString());
-        SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcPublications");
+        //log.info(sb.toString());
         try {
             vivoJena.executeUpdateQuery(sb.toString(), true);
         } catch(IOException e) {
             log.error("Error connecting to SDBJena");
         }
         catch(QueryParseException qpe) {
+
             log.error("QueryParseException", qpe);
+            log.error("ERROR: The pub is for " + uid);
         }
-        this.jcf.returnConnectionToPool(vivoJena, "wcmcPublications");
-        
-        log.info("Inserting inference Triples now");
-        
-        
-        vivoJena = this.jcf.getConnectionfromPool("vitro-kb-inf");
-        //log.info(inf.toString());
-        try {
-            vivoJena.executeUpdateQuery(inf.toString(), true);
-        } catch(IOException e) {
-            log.error("Error connecting to SDBJena");
-        }
-        this.jcf.returnConnectionToPool(vivoJena, "vitro-kb-inf");
         /* try{
             String response = this.vivoClient.vivoUpdateApi(sb.toString());
             log.info(response);
@@ -386,9 +372,8 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
     }
 
     @Override
-    public void syncPublications(List<ReCiterArticleFeature> articles, List<Long> vivoPubs) {
+    public void syncPublications(List<ReCiterArticleFeature> articles, List<Long> vivoPubs, SDBJenaConnect vivoJena) {
         StringBuilder sb = new StringBuilder();
-        SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
         for(Long pmid: vivoPubs) {
             ReCiterArticleFeature reciterPub = articles.stream()
                                                         .filter(pub -> pub.getPmid() == pmid)
@@ -560,7 +545,6 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
             
             sb.setLength(0);
         }
-        this.jcf.returnConnectionToPool(vivoJena, "dataSet");
     }
 
     private String journalIdentifier(ReCiterArticleFeature reCiterArticleFeature) {
@@ -578,61 +562,66 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
     }
 
     @Override
-    public void isPublicationsExist(List<ArticleRetrievalModel> articles) {
+    public String publicationsExist(List<ArticleRetrievalModel> articles) {
         SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
-        for (ArticleRetrievalModel articleRetrievalModel : articles) {
-            StringBuilder sb = new StringBuilder();
-            List<Long> vivoPublications = new ArrayList<>();
-            sb.append(QueryConstants.getSparqlPrefixQuery());
-            sb.append("select ?pubs \n");
-            sb.append("where { \n");
-            sb.append("GRAPH <" + VivoGraphs.PUBLICATIONS_GRAPH + "> {\n");
-            sb.append("<" + JenaConnectionFactory.nameSpace + "cwid-" + articleRetrievalModel.getPersonIdentifier() + "> core:relatedBy ?authorship . \n");
-            sb.append("?authorship core:relates ?publication . \n");
-            sb.append("?publication rdf:type core:InformationResource . \n");
-            sb.append("?publication rdf:type bibo:Document . \n");
-            sb.append("?publication rdf:type bibo:Article . \n");
-            sb.append("BIND(REPLACE(STR(?publication), \"https://vivo.med.cornell.edu/individual/pubid\", \"\") AS ?pubs) \n");
-            sb.append("}}");
-            
-            try {
-				ResultSet rs = vivoJena.executeSelectQuery(sb.toString(), true);
-				while(rs.hasNext()) {
-                    QuerySolution qs = rs.nextSolution();
-                    vivoPublications.add(Long.parseLong(qs.get("pubs").toString()));
-                }
-            } catch(IOException e) {
-                log.error("Error connecting to SDBJena");
-            }
-            List<Long> reciterPublications = articleRetrievalModel.getReCiterArticleFeatures()
-                                                .stream()
-                                                .map(ReCiterArticleFeature::getPmid)
-                                                .collect(Collectors.toList());
+        if(articles != null && !articles.isEmpty()) {
+            for (ArticleRetrievalModel articleRetrievalModel : articles) {
+                if(articleRetrievalModel.getReCiterArticleFeatures() != null && !articleRetrievalModel.getReCiterArticleFeatures().isEmpty()) {
+                    StringBuilder sb = new StringBuilder();
+                    List<Long> vivoPublications = new ArrayList<>();
+                    sb.append(QueryConstants.getSparqlPrefixQuery());
+                    sb.append("select ?pubs \n");
+                    sb.append("where { \n");
+                    sb.append("GRAPH <" + VivoGraphs.PUBLICATIONS_GRAPH + "> {\n");
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "cwid-" + articleRetrievalModel.getPersonIdentifier() + "> core:relatedBy ?authorship . \n");
+                    sb.append("?authorship core:relates ?publication . \n");
+                    sb.append("?publication rdf:type core:InformationResource . \n");
+                    sb.append("?publication rdf:type bibo:Document . \n");
+                    sb.append("?publication rdf:type bibo:Article . \n");
+                    sb.append("BIND(REPLACE(STR(?publication), \"https://vivo.med.cornell.edu/individual/pubid\", \"\") AS ?pubs) \n");
+                    sb.append("}}");
+                    
+                    try {
+                        ResultSet rs = vivoJena.executeSelectQuery(sb.toString(), true);
+                        while(rs.hasNext()) {
+                            QuerySolution qs = rs.nextSolution();
+                            vivoPublications.add(Long.parseLong(qs.get("pubs").toString()));
+                        }
+                    } catch(IOException e) {
+                        log.error("Error connecting to SDBJena");
+                    }
+                    List<Long> reciterPublications = articleRetrievalModel.getReCiterArticleFeatures()
+                                                        .stream()
+                                                        .map(ReCiterArticleFeature::getPmid)
+                                                        .collect(Collectors.toList());
 
-            List<Long> pubsDifferences = new ArrayList<>(reciterPublications);
-            pubsDifferences.removeAll(vivoPublications);
-            if(!pubsDifferences.isEmpty()) {
-                log.info("Some publications does not exist in VIVO. Importing them now. List: " + pubsDifferences.toString());
-                if(pubsDifferences.size() != articleRetrievalModel.getReCiterArticleFeatures().size()) {
-                    List<ReCiterArticleFeature> newPublications = articleRetrievalModel.getReCiterArticleFeatures()
-                                                                    .stream()
-                                                                    .filter(pub -> pubsDifferences.contains(pub.getPmid()))
-                                                                    .collect(Collectors.toList());
-                    checkPublicationExistInVivo(newPublications, articleRetrievalModel.getPersonIdentifier());
-                    importPublications(newPublications, articleRetrievalModel.getPersonIdentifier(), articleRetrievalModel.getDateUpdated());
+                    List<Long> pubsDifferences = new ArrayList<>(reciterPublications);
+                    pubsDifferences.removeAll(vivoPublications);
+                    if(!pubsDifferences.isEmpty()) {
+                        log.info("Some publications does not exist in VIVO. Importing them now. List: " + pubsDifferences.toString());
+                        if(pubsDifferences.size() != articleRetrievalModel.getReCiterArticleFeatures().size()) {
+                            List<ReCiterArticleFeature> newPublications = articleRetrievalModel.getReCiterArticleFeatures()
+                                                                            .stream()
+                                                                            .filter(pub -> pubsDifferences.contains(pub.getPmid()))
+                                                                            .collect(Collectors.toList());
+                            checkPublicationExistInVivo(newPublications, articleRetrievalModel.getPersonIdentifier(), vivoJena);
+                            importPublications(newPublications, articleRetrievalModel.getPersonIdentifier(), articleRetrievalModel.getDateUpdated(), vivoJena);
+                        }
+                        checkPublicationExistInVivo(articleRetrievalModel.getReCiterArticleFeatures(), articleRetrievalModel.getPersonIdentifier(), vivoJena);
+                        importPublications(articleRetrievalModel.getReCiterArticleFeatures(), articleRetrievalModel.getPersonIdentifier(), articleRetrievalModel.getDateUpdated(), vivoJena);
+                    } else {
+                        log.info("All publications from ReCiter exists in VIVO");
+                    }
+                    //Check for publications that needs to be deleted
+                    List<Long> vivoPubs = new ArrayList<>(vivoPublications);
+                    syncPublications(articleRetrievalModel.getReCiterArticleFeatures(), vivoPubs, vivoJena);
+                    deletePublicationsVivo(vivoPubs, reciterPublications);
                 }
-                checkPublicationExistInVivo(articleRetrievalModel.getReCiterArticleFeatures(), articleRetrievalModel.getPersonIdentifier());
-                importPublications(articleRetrievalModel.getReCiterArticleFeatures(), articleRetrievalModel.getPersonIdentifier(), articleRetrievalModel.getDateUpdated());
-            } else {
-                log.info("All publications from ReCiter exists in VIVO");
-            }
-            //Check for publications that needs to be deleted
-            List<Long> vivoPubs = new ArrayList<>(vivoPublications);
-            syncPublications(articleRetrievalModel.getReCiterArticleFeatures(), vivoPubs);
-            deletePublicationsVivo(vivoPubs, reciterPublications);
 
+            }
         }
         this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+        return "Publications fetch completed";
     }
 
     private void deletePublicationsVivo(List<Long> vivoPubs, List<Long> reciterPubs) {
@@ -673,8 +662,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
         }
     }
 
-    private void checkPublicationExistInVivo(List<ReCiterArticleFeature> articles, String uid) {
-        SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+    private void checkPublicationExistInVivo(List<ReCiterArticleFeature> articles, String uid,  SDBJenaConnect vivoJena) {
         Iterator<ReCiterArticleFeature> it = articles.iterator();
         while(it.hasNext()) {
             ReCiterArticleFeature article = it.next();
@@ -703,7 +691,6 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                 log.error("Error connecting to SDBJena", e);
             } 
         }
-		this.jcf.returnConnectionToPool(vivoJena, "dataSet");
     }
 
     private void syncAuthorship(ReCiterArticleFeature article, String uid, SDBJenaConnect vivoJena) {
@@ -746,5 +733,14 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                     }
                 }
         }
+    }
+
+    @Override
+    public Callable<String> getCallable(List<ArticleRetrievalModel> articles) {
+        return new Callable<String>() {
+            public String call() throws Exception {
+                return publicationsExist(articles);
+            }
+        };
     }
 }
