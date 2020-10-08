@@ -605,9 +605,10 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                                                                             .collect(Collectors.toList());
                             checkPublicationExistInVivo(newPublications, articleRetrievalModel.getPersonIdentifier(), vivoJena);
                             importPublications(newPublications, articleRetrievalModel.getPersonIdentifier(), articleRetrievalModel.getDateUpdated(), vivoJena);
+                        } else {
+                            checkPublicationExistInVivo(articleRetrievalModel.getReCiterArticleFeatures(), articleRetrievalModel.getPersonIdentifier(), vivoJena);
+                            importPublications(articleRetrievalModel.getReCiterArticleFeatures(), articleRetrievalModel.getPersonIdentifier(), articleRetrievalModel.getDateUpdated(), vivoJena);
                         }
-                        checkPublicationExistInVivo(articleRetrievalModel.getReCiterArticleFeatures(), articleRetrievalModel.getPersonIdentifier(), vivoJena);
-                        importPublications(articleRetrievalModel.getReCiterArticleFeatures(), articleRetrievalModel.getPersonIdentifier(), articleRetrievalModel.getDateUpdated(), vivoJena);
                     } else {
                         log.info("All publications from ReCiter exists in VIVO for " + articleRetrievalModel.getPersonIdentifier());
                     }
