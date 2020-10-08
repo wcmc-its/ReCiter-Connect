@@ -49,9 +49,9 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
         StopWatch stopWatch = new StopWatch("Publications import to VIVO");
         stopWatch.start("Publications import to VIVO");
         StringBuilder sb = new StringBuilder();
+        sb.append(QueryConstants.getSparqlPrefixQuery());
+        sb.append("INSERT DATA { GRAPH <" + VivoGraphs.PUBLICATIONS_GRAPH + ">{ \n");
         for (ReCiterArticleFeature articleFeature : articles) {
-            sb.append(QueryConstants.getSparqlPrefixQuery());
-            sb.append("INSERT DATA { GRAPH <" + VivoGraphs.PUBLICATIONS_GRAPH + ">{ \n");
             final String publicationUrl = "<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid()
                     + ">";
             sb.append(publicationUrl + " core:DateTimeValue \"" + this.sdf.format(new Date()) + "\" . \n");
@@ -342,21 +342,20 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                 } 
             }
             sb.append(publicationUrl + " <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"ReCiter Connect\" . \n");
-            sb.append("}}");
-            //log.info(sb.toString());
-            try {
-                vivoJena.executeUpdateQuery(sb.toString(), true);
-            } catch(IOException e) {
-                log.error("Error connecting to SDBJena");
-            }
-            catch(QueryParseException qpe) {
-
-                log.error("QueryParseException", qpe);
-                log.error("ERROR: The pub is for " + uid);
-            }
-            sb.setLength(0);
+            
         }
-        
+        sb.append("}}");
+        //log.info(sb.toString());
+        try {
+            vivoJena.executeUpdateQuery(sb.toString(), true);
+        } catch(IOException e) {
+            log.error("Error connecting to SDBJena");
+        }
+        catch(QueryParseException qpe) {
+
+            log.error("QueryParseException", qpe);
+            log.error("ERROR: The pub is for " + uid);
+        }
         stopWatch.stop();
         log.info("Publication import for " + uid + " took " + stopWatch.getTotalTimeSeconds()+"s");
         /* try{
@@ -566,6 +565,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
         if(articles != null && !articles.isEmpty()) {
             for (ArticleRetrievalModel articleRetrievalModel : articles) {
                 if(articleRetrievalModel.getReCiterArticleFeatures() != null && !articleRetrievalModel.getReCiterArticleFeatures().isEmpty()) {
+                    log.info("*******************Starting publication import for " + articleRetrievalModel.getPersonIdentifier() + "************************");
                     StringBuilder sb = new StringBuilder();
                     List<Long> vivoPublications = new ArrayList<>();
                     sb.append(QueryConstants.getSparqlPrefixQuery());
@@ -616,6 +616,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                     List<Long> vivoPubs = new ArrayList<>(vivoPublications);
                     syncPublications(articleRetrievalModel.getReCiterArticleFeatures(), vivoPubs, vivoJena);
                     deletePublicationsVivo(vivoPubs, reciterPublications);
+                    log.info("*******************Ending publication import for " + articleRetrievalModel.getPersonIdentifier() + "************************");
                 }
 
             }
