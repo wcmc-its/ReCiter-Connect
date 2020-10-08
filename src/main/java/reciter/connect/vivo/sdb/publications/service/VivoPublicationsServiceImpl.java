@@ -49,11 +49,9 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
         StopWatch stopWatch = new StopWatch("Publications import to VIVO");
         stopWatch.start("Publications import to VIVO");
         StringBuilder sb = new StringBuilder();
-        //StringBuilder inf = new StringBuilder();
-        sb.append(QueryConstants.getSparqlPrefixQuery());
-        sb.append("INSERT DATA { GRAPH <" + VivoGraphs.PUBLICATIONS_GRAPH + ">{ \n");
-        //inf.append("INSERT DATA { GRAPH <" + VivoGraphs.VITRO_KB_INF_GRAPH + ">{ \n");
         for (ReCiterArticleFeature articleFeature : articles) {
+            sb.append(QueryConstants.getSparqlPrefixQuery());
+            sb.append("INSERT DATA { GRAPH <" + VivoGraphs.PUBLICATIONS_GRAPH + ">{ \n");
             final String publicationUrl = "<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid()
                     + ">";
             sb.append(publicationUrl + " core:DateTimeValue \"" + this.sdf.format(new Date()) + "\" . \n");
@@ -298,7 +296,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                         sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + reCiterArticleAuthorFeature.getRank() + "> core:relates " + publicationUrl + " . \n");
                         sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + reCiterArticleAuthorFeature.getRank() + "> core:rank \"" + reCiterArticleAuthorFeature.getRank() + "\"^^xsd:integer . \n");
                         //Linking vcard of the person
-                        sb.append("<" + JenaConnectionFactory.nameSpace + "cwid-" + uid + "> rdf:type <http://www.w3.org/2006/vcard/ns#Individual> . \n");
+                        sb.append("<" + JenaConnectionFactory.nameSpace + "cwid-" + uid + "> rdf:type foaf:Person . \n");
                         sb.append("<" + JenaConnectionFactory.nameSpace + "cwid-" + uid + "> core:relatedBy <" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + reCiterArticleAuthorFeature.getRank() + "> . \n");
                         sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + reCiterArticleAuthorFeature.getRank() + "> core:relates <" + JenaConnectionFactory.nameSpace + "cwid-" + uid + "> . \n");
                         sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + reCiterArticleAuthorFeature.getRank() + "> core:relates <" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> . \n");
@@ -344,22 +342,23 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                 } 
             }
             sb.append(publicationUrl + " <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"ReCiter Connect\" . \n");
-            //log.info("############################################################");
-            
+            sb.append("}}");
+            //log.info(sb.toString());
+            try {
+                vivoJena.executeUpdateQuery(sb.toString(), true);
+            } catch(IOException e) {
+                log.error("Error connecting to SDBJena");
+            }
+            catch(QueryParseException qpe) {
+
+                log.error("QueryParseException", qpe);
+                log.error("ERROR: The pub is for " + uid);
+            }
+            sb.setLength(0);
         }
         
-        sb.append("}}");
-        //log.info(sb.toString());
-        try {
-            vivoJena.executeUpdateQuery(sb.toString(), true);
-        } catch(IOException e) {
-            log.error("Error connecting to SDBJena");
-        }
-        catch(QueryParseException qpe) {
-
-            log.error("QueryParseException", qpe);
-            log.error("ERROR: The pub is for " + uid);
-        }
+        stopWatch.stop();
+        log.info("Publication import for " + uid + " took " + stopWatch.getTotalTimeSeconds()+"s");
         /* try{
             String response = this.vivoClient.vivoUpdateApi(sb.toString());
             log.info(response);
@@ -598,7 +597,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                     List<Long> pubsDifferences = new ArrayList<>(reciterPublications);
                     pubsDifferences.removeAll(vivoPublications);
                     if(!pubsDifferences.isEmpty()) {
-                        log.info("Some publications does not exist in VIVO. Importing them now. List: " + pubsDifferences.toString());
+                        log.info("Some publications does not exist in VIVO. Importing them now for " + articleRetrievalModel.getPersonIdentifier() +  " List: " + pubsDifferences.toString());
                         if(pubsDifferences.size() != articleRetrievalModel.getReCiterArticleFeatures().size()) {
                             List<ReCiterArticleFeature> newPublications = articleRetrievalModel.getReCiterArticleFeatures()
                                                                             .stream()
@@ -610,7 +609,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                         checkPublicationExistInVivo(articleRetrievalModel.getReCiterArticleFeatures(), articleRetrievalModel.getPersonIdentifier(), vivoJena);
                         importPublications(articleRetrievalModel.getReCiterArticleFeatures(), articleRetrievalModel.getPersonIdentifier(), articleRetrievalModel.getDateUpdated(), vivoJena);
                     } else {
-                        log.info("All publications from ReCiter exists in VIVO");
+                        log.info("All publications from ReCiter exists in VIVO for " + articleRetrievalModel.getPersonIdentifier());
                     }
                     //Check for publications that needs to be deleted
                     List<Long> vivoPubs = new ArrayList<>(vivoPublications);
@@ -640,7 +639,8 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                 sb.append("WHERE { \n");
                 sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> core:relatedBy ?authorship . \n");
                 sb.append("?authorship core:relates ?person . \n");
-                sb.append("?person rdf:type vcard:Individual . \n");
+                sb.append("OPTIONAL {?person rdf:type vcard:Individual . }\n");
+                sb.append("OPTIONAL {?person rdf:type foaf:Person . }\n");
                 sb.append("?person core:relatedBy ?authorship . \n");
                 sb.append("OPTIONAL {<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> <http://purl.org/spar/c4o/hasGlobalCitationFrequency> ?citation . }\n");
                 sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> ?p ?o . \n");

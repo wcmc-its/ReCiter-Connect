@@ -92,7 +92,7 @@ public class JenaConnectionFactory {
 	 * @return boolean
 	 */
 	private synchronized boolean checkIfConnectionPoolIsFull() {
-		final int MAX_POOL_SIZE = 35;
+		final int MAX_POOL_SIZE = 25;
 		if(this.connectionPool.size()<MAX_POOL_SIZE)
 			return false;
 		else
