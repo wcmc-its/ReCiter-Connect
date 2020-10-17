@@ -407,6 +407,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                                 sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> core:pmcid ?pmcid . \n");
                                 sb.append("}");
                                 String response = this.vivoClient.vivoUpdateApi(sb.toString());
+                                log.info("PMCID was updated for publication - " + pmid + " from " + qs.get("pmcid").toString() + " to " + reciterPub.getPmcid());
                                 log.info(response);
                             } else {
                                 log.info("PMCID is in sync for publication - " + pmid);
@@ -427,6 +428,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                                 sb.append("<" + JenaConnectionFactory.nameSpace + "citation-pubid" + pmid + "> rdfs:label ?count . \n");
                                 sb.append("}");
                                 String response = this.vivoClient.vivoUpdateApi(sb.toString());
+                                log.info("Citation Count was updated for publication - " + pmid + " from " + qs.get("citationCount").toString() + " to " + reciterPub.getTimesCited());
                                 log.info(response);
                             } else {
                                 log.info("Times Cited is in sync for publication - " + pmid);
@@ -614,7 +616,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                     }
                     //Check for publications that needs to be deleted
                     List<Long> vivoPubs = new ArrayList<>(vivoPublications);
-                    syncPublications(articleRetrievalModel.getReCiterArticleFeatures(), vivoPubs, vivoJena);
+                    //syncPublications(articleRetrievalModel.getReCiterArticleFeatures(), vivoPubs, vivoJena);
                     deletePublicationsVivo(vivoPubs, reciterPublications);
                     log.info("*******************Ending publication import for " + articleRetrievalModel.getPersonIdentifier() + "************************");
                 }
