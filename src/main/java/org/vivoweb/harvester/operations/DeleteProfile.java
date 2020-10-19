@@ -22,9 +22,12 @@ import org.openjena.atlas.logging.Log;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 import org.vivoweb.harvester.ingest.EdDataInterface;
 import org.vivoweb.harvester.ingest.EdDataInterfaceImpl;
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
+
+import lombok.extern.slf4j.Slf4j;
 
 import org.apache.jena.query.QuerySolution;
 import org.apache.jena.query.ResultSet;
@@ -47,6 +50,7 @@ import reciter.connect.database.mysql.jena.JenaConnectionFactory;
  * Date - 10/24/2016
  *
  */
+@Component
 public class DeleteProfile {
 	
 	public static String propertyFilePath = null;
@@ -77,15 +81,12 @@ public class DeleteProfile {
 	/**
 	 * <i>This is a connection factory object to get ldap connection to Enterprise Directory</i>
 	 */
+	@Autowired
 	private LDAPConnectionFactory lcf;
 
 	@Autowired
 	private EdDataInterface edi;
 	
-	/**
-	 * <i> Connection factory object to get connections to PubAdmin </i>
-	 */
-	private MysqlConnectionFactory mcf;
 	
 	/**
 	 * SLF4J Logger
@@ -1033,7 +1034,6 @@ public class DeleteProfile {
 		
 		int inActiveCount = 0;
 		int activeCount = 0;
-		this.con = this.mcf.getConnectionfromPool();
 		List<String> people = edi.getPeopleInVivo(this.jcf);
 		if(people.isEmpty())
 			logger.info("No People needs to be deleted");
@@ -1124,18 +1124,6 @@ public class DeleteProfile {
 		}
 		logger.info("Total inactive profile deleted: " + inActiveCount);
 		logger.info("Total active profiles in VIVO: " + activeCount);
-		
-		//Destroy LDAP Connection Pool
-		if(this.lcf !=null)
-			this.lcf.destroyConnectionPool();
-		//Destroy Jena Connection Pool
-		if(this.jcf != null)
-			this.jcf.destroyConnectionPool();
-		//Destory Mysql connection pool
-		if(this.con!=null) {
-			this.mcf.returnConnectionToPool(this.con);
-			this.mcf.destroyConnectionPool();
-		}
 		
 	}
 
