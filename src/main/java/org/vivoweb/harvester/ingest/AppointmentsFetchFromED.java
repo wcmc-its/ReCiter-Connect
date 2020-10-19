@@ -1282,14 +1282,14 @@ public class AppointmentsFetchFromED {
 							
 							log.info(sb.toString());
 							
-							vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
+							vivoJena = this.jcf.getConnectionfromPool("dataSet");
 							
 							try {
 								runSparqlUpdateTemplate(sb.toString(), vivoJena);
 							} catch(IOException e) {
 								log.error("IOException" ,e);
 							}
-							this.jcf.returnConnectionToPool(vivoJena, "wcmcOfa");
+							this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 						}
 						
 					}
