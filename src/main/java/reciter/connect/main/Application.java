@@ -37,6 +37,7 @@ import org.vivoweb.harvester.ingest.AcademicFetchFromED;
 import org.vivoweb.harvester.ingest.AppointmentsFetchFromED;
 import org.vivoweb.harvester.ingest.EdDataInterface;
 import org.vivoweb.harvester.ingest.GrantsFetchFromED;
+import org.vivoweb.harvester.operations.DeleteProfile;
 
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -121,6 +122,7 @@ public class Application implements ApplicationRunner {
         GrantsFetchFromED grantsFetchFromED = context.getBean(GrantsFetchFromED.class);
         AppointmentsFetchFromED appointmentsFetchFromED = context.getBean(AppointmentsFetchFromED.class);
         ReCiterClient reCiterClient = context.getBean(ReCiterClient.class);
+        DeleteProfile deleteProfile = context.getBean(DeleteProfile.class);
 
         ExecutorService executor = Executors.newFixedThreadPool(25);
 
@@ -156,13 +158,14 @@ public class Application implements ApplicationRunner {
                  log.error("Exception", e); 
                 }
             } */
+            deleteProfile.execute();
             List<List<PeopleBean>> peopleSubSets = Lists.partition(people, 10);
             Iterator<List<PeopleBean>> subSetsIteratorPeople = peopleSubSets.iterator();
             while (subSetsIteratorPeople.hasNext()) {
                 List<PeopleBean> subsetPeoples = subSetsIteratorPeople.next();
                 List<Callable<String>> callables = new ArrayList<>();
                 for(PeopleBean peopleSubset: subsetPeoples) {
-                    //callables.add(academicFetchFromED.getCallable(Arrays.asList(peopleSubset)));
+                    callables.add(academicFetchFromED.getCallable(Arrays.asList(peopleSubset)));
                 }
                 log.info("People fetch will run for " + subsetPeoples.toString());
                 try {
@@ -188,8 +191,8 @@ public class Application implements ApplicationRunner {
 		    while (subSetsIteratorPeopleCwids.hasNext()) {
                 List<String> subsetPeoples = subSetsIteratorPeopleCwids.next();
                 List<Callable<String>> callables = new ArrayList<>();
-                //callables.add(appointmentsFetchFromED.getCallable(subsetPeoples));
-                //callables.add(grantsFetchFromED.getCallable(subsetPeoples));
+                callables.add(appointmentsFetchFromED.getCallable(subsetPeoples));
+                callables.add(grantsFetchFromED.getCallable(subsetPeoples));
                 try{
                     StopWatch stopWatch = new StopWatch("Getting Publications from ReCiter");
                     stopWatch.start("Getting Publications from ReCiter");
@@ -226,20 +229,6 @@ public class Application implements ApplicationRunner {
         } catch (Exception e) {
             log.error("Exception", e);
         }
-
-        /*ReCiterClient reCiterClient = context.getBean(ReCiterClient.class);
-        // ArticleRetrievalModel pubs =
-        // reCiterClient.getPublicationsByUid("paa2013").block();
-        
-         try{ List<ArticleRetrievalModel> allPubs = reCiterClient
-            .getPublicationsByGroup(Arrays.asList("rak2007"))
-            .collectList()
-            .block();
-            log.info("pubs" + allPubs.size()); 
-            vivoPublicationsService.importPublications(allPubs);
-        }   catch(Exception e) {
-         log.error("Exception", e); 
-        } */
         
          
         if (ldapConnectionFactory != null)
