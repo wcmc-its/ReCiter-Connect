@@ -35,6 +35,7 @@ import org.json.JSONObject;
 import reciter.connect.beans.vivo.GrantBean;
 import reciter.connect.database.mssql.MssqlConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
+import reciter.connect.vivo.IngestType;
 import reciter.connect.vivo.api.client.VivoClient;
 
 /**
@@ -75,6 +76,8 @@ public class GrantsFetchFromED {
 	 * The default namespace for VIVO
 	 */
 	private String vivoNamespace = JenaConnectionFactory.nameSpace;
+
+	private String ingestType = System.getenv("INGEST_TYPE");
 	
 	
 	SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
@@ -586,10 +589,19 @@ public class GrantsFetchFromED {
 				}
 				
 				//log.info(sb.toString());
-				try {
-					vivoJena.executeUpdateQuery(sb.toString(), true);
-				} catch(IOException e) {
-					log.error("Error in updating grant data: ", e);
+				if(ingestType.equals(IngestType.VIVO_API.toString())) {
+					try{
+						String response = this.vivoClient.vivoUpdateApi(sb.toString());
+						log.info(response);
+					} catch(Exception  e) {
+						log.info("Api Exception", e);
+					}
+				} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+					try {
+						vivoJena.executeUpdateQuery(sb.toString(), true);
+					} catch(IOException e) {
+						log.error("Error connecting to Jena database", e);
+					}
 				}
 				gb.setContributors(newContributors);
 				
@@ -1434,14 +1446,24 @@ public class GrantsFetchFromED {
 			
 			sb.append("}}");
 			log.info(sb.toString());
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
-			try {
-				vivoJena.executeUpdateQuery(sb.toString(), true);
-				
-			} catch(IOException e) {
-				log.error("IOException" ,e);
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				try{
+					String response = this.vivoClient.vivoUpdateApi(sb.toString());
+					log.info(response);
+				} catch(Exception  e) {
+					log.info("Api Exception", e);
+				}
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+				try {
+					SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+					vivoJena.executeUpdateQuery(sb.toString(), true);
+					if(vivoJena != null)
+						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+				} catch(IOException e) {
+					log.error("Error connecting to Jena database", e);
+				}
+			
 			}
-			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			insertInferenceTriples(gb, crudStatus);
 			log.info("Successful insertion of grant-" + gb.getAwardNumber() + " for cwid: " + cwid);
 		}

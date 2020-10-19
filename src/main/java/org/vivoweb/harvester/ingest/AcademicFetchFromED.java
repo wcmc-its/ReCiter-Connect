@@ -27,6 +27,7 @@ import com.unboundid.ldap.sdk.SearchResultEntry;
 import reciter.connect.beans.vivo.PeopleBean;
 import reciter.connect.database.ldap.LDAPConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
+import reciter.connect.vivo.IngestType;
 import reciter.connect.vivo.api.client.VivoClient;
 import reciter.connect.vivo.sdb.VivoGraphs;
 
@@ -52,6 +53,8 @@ public class AcademicFetchFromED {
 
 	@Autowired
 	private JenaConnectionFactory jcf;
+	
+	private String ingestType = System.getenv("INGEST_TYPE");
 	
 	/**
 	 * The default namespace for VIVO
@@ -291,18 +294,25 @@ public class AcademicFetchFromED {
 				
 			}
 			sb.append("}}");
-			
 			//log.info(sb.toString());
-			try {
-				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
-				runSparqlUpdateTemplate(sb.toString(), vivoJena);
-				if(vivoJena != null)
-					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
-			} catch(IOException e) {
-				log.error("Error connecting to Jena database", e);
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				try{
+					String response = this.vivoClient.vivoUpdateApi(sb.toString());
+					log.info(response);
+				} catch(Exception  e) {
+					log.info("Api Exception", e);
+				}
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+				try {
+					SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+					runSparqlUpdateTemplate(sb.toString(), vivoJena);
+					if(vivoJena != null)
+						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+				} catch(IOException e) {
+					log.error("Error connecting to Jena database", e);
+				}
+			
 			}
-			
-			
 			insertInferenceTriples(pb);
 		}
 		
