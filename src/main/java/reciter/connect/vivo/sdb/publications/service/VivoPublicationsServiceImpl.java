@@ -23,6 +23,7 @@ import org.vivoweb.harvester.util.repo.SDBJenaConnect;
 import lombok.extern.slf4j.Slf4j;
 import reciter.connect.api.client.model.ArticleRetrievalModel;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
+import reciter.connect.vivo.IngestType;
 import reciter.connect.vivo.api.client.VivoClient;
 import reciter.connect.vivo.sdb.VivoGraphs;
 import reciter.connect.vivo.sdb.query.QueryConstants;
@@ -43,6 +44,8 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
     
     @Autowired
     private VivoClient vivoClient;
+
+    private String ingestType = System.getenv("INGEST_TYPE");
 
     @Override
     public void importPublications(List<ReCiterArticleFeature> articles, String uid, String dateUpdated, SDBJenaConnect vivoJena) {
@@ -119,20 +122,20 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                     this.cal.setTime(citationDate);
                     int month = this.cal.get(Calendar.MONTH) + 1; // Since calender month start with 0
                     sb.append("<" + JenaConnectionFactory.nameSpace + "citation-pubid" + articleFeature.getPmid()
-                            + "> core:dateTimeValue <" + JenaConnectionFactory.nameSpace + "daymonthyear"
+                            + "> core:dateTimeValue <" + JenaConnectionFactory.nameSpace + "citation-daymonthyear"
                             + this.cal.get(Calendar.DAY_OF_MONTH) + (month < 10 ? ("0" + month) : (month))
                             + this.cal.get(Calendar.YEAR) + "> . \n");
-                    sb.append("<" + JenaConnectionFactory.nameSpace + "daymonthyear"
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "citation-daymonthyear"
                             + this.cal.get(Calendar.DAY_OF_MONTH) + (month < 10 ? ("0" + month) : (month))
                             + this.cal.get(Calendar.YEAR) + "> rdf:type core:DateTimeValue . \n");
-                    sb.append("<" + JenaConnectionFactory.nameSpace + "daymonthyear"
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "citation-daymonthyear"
                             + this.cal.get(Calendar.DAY_OF_MONTH) + (month < 10 ? ("0" + month) : (month))
                             + this.cal.get(Calendar.YEAR) + "> vitro:mostSpecificType core:DateTimeValue . \n");
-                    sb.append("<" + JenaConnectionFactory.nameSpace + "daymonthyear"
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "citation-daymonthyear"
                             + this.cal.get(Calendar.DAY_OF_MONTH) + (month < 10 ? ("0" + month) : (month))
                             + this.cal.get(Calendar.YEAR)
                             + "> core:dateTimePrecision core:yearMonthDayPrecision . \n");
-                    sb.append("<" + JenaConnectionFactory.nameSpace + "daymonthyear"
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "citation-daymonthyear"
                             + this.cal.get(Calendar.DAY_OF_MONTH) + (month < 10 ? ("0" + month) : (month))
                             + this.cal.get(Calendar.YEAR) + "> core:dateTime \"" + citationDate
                             + "T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> . \n");
@@ -346,15 +349,19 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
         }
         sb.append("}}");
         //log.info(sb.toString());
-        try {
-            vivoJena.executeUpdateQuery(sb.toString(), true);
-        } catch(IOException e) {
-            log.error("Error connecting to SDBJena");
-        }
-        catch(QueryParseException qpe) {
-
-            log.error("QueryParseException", qpe);
-            log.error("ERROR: The pub is for " + uid);
+        if(ingestType.equals(IngestType.VIVO_API.toString())) {
+            String response = this.vivoClient.vivoUpdateApi(sb.toString());
+            log.info(response);
+        } else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+            try {
+                vivoJena.executeUpdateQuery(sb.toString(), true);
+            } catch(IOException e) {
+                log.error("Error connecting to SDBJena");
+            }
+            catch(QueryParseException qpe) {
+                log.error("QueryParseException", qpe);
+                log.error("ERROR: The pub is for " + uid);
+            }
         }
         stopWatch.stop();
         log.info("Publication import for " + uid + " took " + stopWatch.getTotalTimeSeconds()+"s");
@@ -406,9 +413,21 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                                 sb.append("WHERE { \n");
                                 sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> core:pmcid ?pmcid . \n");
                                 sb.append("}");
-                                String response = this.vivoClient.vivoUpdateApi(sb.toString());
                                 log.info("PMCID was updated for publication - " + pmid + " from " + qs.get("pmcid").toString() + " to " + reciterPub.getPmcid());
-                                log.info(response);
+                                if(ingestType.equals(IngestType.VIVO_API.toString())) {
+                                    String response = this.vivoClient.vivoUpdateApi(sb.toString());
+                                    log.info(response);
+                                } else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+                                    try {
+                                        vivoJena.executeUpdateQuery(sb.toString(), true);
+                                    } catch(IOException e) {
+                                        log.error("Error connecting to SDBJena");
+                                    }
+                                    catch(QueryParseException qpe) {
+                                        log.error("QueryParseException", qpe);
+                                        log.error("ERROR: The pub is " + pmid);
+                                    }
+                                }
                             } else {
                                 log.info("PMCID is in sync for publication - " + pmid);
                             }
@@ -427,9 +446,22 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                                 sb.append("WHERE { \n");
                                 sb.append("<" + JenaConnectionFactory.nameSpace + "citation-pubid" + pmid + "> rdfs:label ?count . \n");
                                 sb.append("}");
-                                String response = this.vivoClient.vivoUpdateApi(sb.toString());
                                 log.info("Citation Count was updated for publication - " + pmid + " from " + qs.get("citationCount").toString() + " to " + reciterPub.getTimesCited());
-                                log.info(response);
+                                /*if(ingestType.equals(IngestType.VIVO_API.toString())) {
+                                    String response = this.vivoClient.vivoUpdateApi(sb.toString());
+                                    log.info("Citation Count was updated for publication - " + pmid + " from " + qs.get("citationCount").toString() + " to " + reciterPub.getTimesCited());
+                                    log.info(response);
+                                } else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {*/
+                                    try {
+                                        vivoJena.executeUpdateQuery(sb.toString(), true);
+                                    } catch(IOException e) {
+                                        log.error("Error connecting to SDBJena");
+                                    }
+                                    catch(QueryParseException qpe) {
+                                        log.error("QueryParseException", qpe);
+                                        log.error("ERROR: The pub is " + pmid);
+                                    }
+                                //}
                             } else {
                                 log.info("Times Cited is in sync for publication - " + pmid);
                             }
@@ -493,8 +525,20 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                                 sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> rdf:type ?type . \n");
                                 sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> vitro:mostSpecificType ?mostSpecificType . \n");
                                 sb.append("}");
-                                String response = this.vivoClient.vivoUpdateApi(sb.toString());
-                                log.info(response);
+                                if(ingestType.equals(IngestType.VIVO_API.toString())) {
+                                    String response = this.vivoClient.vivoUpdateApi(sb.toString());
+                                    log.info(response);
+                                } else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+                                    try {
+                                        vivoJena.executeUpdateQuery(sb.toString(), true);
+                                    } catch(IOException e) {
+                                        log.error("Error connecting to SDBJena");
+                                    }
+                                    catch(QueryParseException qpe) {
+                                        log.error("QueryParseException", qpe);
+                                        log.error("ERROR: The pub is " + pmid);
+                                    }
+                                }
                             } else {
                                 log.info("Publications Type is in sync for publication - " + pmid);
                             }
@@ -533,8 +577,20 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                             sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> core:freetextKeyword \"" + meshMajor + "\" . \n");
                         }
                         sb.append("}}");
-                        String response = this.vivoClient.vivoUpdateApi(sb.toString());
-                        log.info(response);
+                        if(ingestType.equals(IngestType.VIVO_API.toString())) {
+                            String response = this.vivoClient.vivoUpdateApi(sb.toString());
+                            log.info(response);
+                        } else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+                            try {
+                                vivoJena.executeUpdateQuery(sb.toString(), true);
+                            } catch(IOException e) {
+                                log.error("Error connecting to SDBJena");
+                            }
+                            catch(QueryParseException qpe) {
+                                log.error("QueryParseException", qpe);
+                                log.error("ERROR: The pub is " + pmid);
+                            }
+                        }
                     } else {
                         log.info("Mesh Major is in sync for publication - " + pmid);
                     }
@@ -616,8 +672,8 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                     }
                     //Check for publications that needs to be deleted
                     List<Long> vivoPubs = new ArrayList<>(vivoPublications);
-                    //syncPublications(articleRetrievalModel.getReCiterArticleFeatures(), vivoPubs, vivoJena);
-                    deletePublicationsVivo(vivoPubs, reciterPublications);
+                    syncPublications(articleRetrievalModel.getReCiterArticleFeatures(), vivoPubs, vivoJena);
+                    deletePublicationsVivo(vivoPubs, reciterPublications, vivoJena, articleRetrievalModel.getPersonIdentifier());
                     log.info("*******************Ending publication import for " + articleRetrievalModel.getPersonIdentifier() + "************************");
                 }
 
@@ -627,7 +683,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
         return "Publications fetch completed";
     }
 
-    private void deletePublicationsVivo(List<Long> vivoPubs, List<Long> reciterPubs) {
+    private void deletePublicationsVivo(List<Long> vivoPubs, List<Long> reciterPubs, SDBJenaConnect vivoJena, String uid) {
         vivoPubs.removeAll(reciterPubs);
         if(!vivoPubs.isEmpty()) {
             for(Long pmid: vivoPubs) {
@@ -637,29 +693,38 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                 sb.append("DELETE { \n");
                 sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> ?p ?o . \n");
                 sb.append("?authorship ?p1 ?o1 .");
-                sb.append("?citation ?p2 ?o2 . \n");
-                sb.append("?person core:relatedBy ?authorship . \n");
+                //sb.append("?citation ?p2 ?o2 . \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "cwid-" + uid + "> core:relatedBy ?authorship . \n");
                 sb.append("} \n");
                 sb.append("WHERE { \n");
                 sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> core:relatedBy ?authorship . \n");
-                sb.append("?authorship core:relates ?person . \n");
-                sb.append("OPTIONAL {?person rdf:type vcard:Individual . }\n");
-                sb.append("OPTIONAL {?person rdf:type foaf:Person . }\n");
-                sb.append("?person core:relatedBy ?authorship . \n");
-                sb.append("OPTIONAL {<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> <http://purl.org/spar/c4o/hasGlobalCitationFrequency> ?citation . }\n");
+                sb.append("?authorship core:relates <" + JenaConnectionFactory.nameSpace + "cwid-" + uid + "> . \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "cwid-" + uid + "> rdf:type foaf:Person . \n");
+                //sb.append("OPTIONAL {<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> <http://purl.org/spar/c4o/hasGlobalCitationFrequency> ?citation . }\n");
                 sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> ?p ?o . \n");
                 sb.append("?authorship ?p1 ?o1 .");
-                sb.append("OPTIONAL {?citation ?p2 ?o2 . }\n");
+                //sb.append("OPTIONAL {?citation ?p2 ?o2 . }\n");
                 sb.append("} \n");
 
                 log.info("Deleting publication " + pmid + " from VIVO");
-                try{
-                    String response = this.vivoClient.vivoUpdateApi(sb.toString());
-                    log.info(response);
-                } catch(Exception  e) {
-                    log.info("Api Exception", e);
+                if(ingestType.equals(IngestType.VIVO_API.toString())) {
+                    try{
+                        String response = this.vivoClient.vivoUpdateApi(sb.toString());
+                        log.info(response);
+                    } catch(Exception  e) {
+                        log.info("Api Exception", e);
+                    }
+                } else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+                    try {
+                        vivoJena.executeUpdateQuery(sb.toString(), true);
+                    } catch(IOException e) {
+                        log.error("Error connecting to SDBJena");
+                    }
+                    catch(QueryParseException qpe) {
+                        log.error("QueryParseException", qpe);
+                        log.error("ERROR: The pub is " + pmid);
+                    }
                 }
-
             }
         } else {
             log.info("No Publications to delete from VIVO");
