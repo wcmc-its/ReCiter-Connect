@@ -7,8 +7,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
-import com.hp.hpl.jena.query.QuerySolution;
-import com.hp.hpl.jena.query.ResultSet;
+
+import org.apache.jena.query.QuerySolution;
+import org.apache.jena.query.ResultSet;
 
 import reciter.connect.beans.vivo.*;
 

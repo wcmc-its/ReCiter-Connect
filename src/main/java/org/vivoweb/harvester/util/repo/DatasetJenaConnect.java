@@ -6,7 +6,8 @@
 package org.vivoweb.harvester.util.repo;
 
 import java.io.IOException;
-import com.hp.hpl.jena.query.Dataset;
+
+import org.apache.jena.query.Dataset;
 
 /**
  * Connection Helper for models in a Dataset
@@ -18,6 +19,7 @@ public class DatasetJenaConnect extends JenaConnect {
 	 * The dataset we are connected to
 	 */
 	private Dataset ds;
+
 	
 	/**
 	 * Constructor

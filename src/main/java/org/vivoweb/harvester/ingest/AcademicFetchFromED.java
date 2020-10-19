@@ -8,19 +8,28 @@ import java.util.Date;
 import java.util.Iterator;
 
 import java.util.List;
+import java.util.concurrent.Callable;
+
 import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.jena.query.QuerySolution;
+import org.apache.jena.query.ResultSet;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StopWatch;
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
 
 import lombok.extern.slf4j.Slf4j;
 
-import com.hp.hpl.jena.query.QuerySolution;
 import com.unboundid.ldap.sdk.SearchResultEntry;
 
 import reciter.connect.beans.vivo.PeopleBean;
 import reciter.connect.database.ldap.LDAPConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
+import reciter.connect.vivo.IngestType;
+import reciter.connect.vivo.api.client.VivoClient;
+import reciter.connect.vivo.sdb.VivoGraphs;
 
 /**
  * @author szd2013
@@ -32,23 +41,20 @@ import reciter.connect.database.mysql.jena.JenaConnectionFactory;
 @Component
 public class AcademicFetchFromED {
 	
-	/**
-	 * List of people in VIVO
-	 */
-	private ArrayList<PeopleBean> people = new ArrayList<PeopleBean>();
-	
 	private int updateCount = 0;
 	
 	public static String propertyFilePath;
-	
-	/**
-	 * Jena connection factory object for all the apache jena sdb related connections
-	 */
+
 	@Autowired
-	private JenaConnectionFactory jcf;
+	private VivoClient vivoClient;
 	
 	@Autowired
 	private LDAPConnectionFactory lcf;
+
+	@Autowired
+	private JenaConnectionFactory jcf;
+	
+	private String ingestType = System.getenv("INGEST_TYPE");
 	
 	/**
 	 * The default namespace for VIVO
@@ -63,19 +69,23 @@ public class AcademicFetchFromED {
 	 * @throws IOException
 	 * @throws FileNotFoundException
 	 */
-		
+	
+	public Callable<String> getCallable(List<PeopleBean> people) {
+        return new Callable<String>() {
+            public String call() throws Exception {
+                return execute(people);
+            }
+        };
+    }
 		
 		/**
 		 * This is the main execution method of the class
 		 */
-	public void execute() throws IOException {
-
-		getActivePeopleFromED();
-		
+	public String execute(List<PeopleBean> people) throws IOException {
+		StopWatch stopWatch = new StopWatch("People fetch performance");
+		stopWatch.start("Person updates");
 		int count = 0;
-		
-		
-		Iterator<PeopleBean>  it = this.people.iterator();
+		Iterator<PeopleBean>  it = people.iterator();
 		while(it.hasNext()) {
 			PeopleBean pb = it.next();
 			log.info("################################ " + pb.getCwid() + " - " + pb.getDisplayName() + " - Insert/Update Operation #####################");
@@ -87,7 +97,7 @@ public class AcademicFetchFromED {
 			else {
 				log.info("Person: "+pb.getCwid() + " already exist in VIVO");
 				checkForUpdates(pb);
-				syncPersonTypes(pb);
+				//syncPersonTypes(pb);
 			}
 			log.info("################################ End of " + pb.getCwid() + " - " + pb.getDisplayName() + " -  Insert/Update Operation ###################");
 		}
@@ -96,16 +106,18 @@ public class AcademicFetchFromED {
 		
 		log.info("Number of people updated in VIVO: " + this.updateCount);
 		
-		
-		log.info("People fetch completed successfully...");
+		stopWatch.stop();
+		log.info("People fetch Time taken: " + stopWatch.getTotalTimeSeconds() + "s");
+		return "People fetch completed successfully for cwids: " + people.toString();
 	}
 		
 		
 		/**
 		 * This function gets active people from Enterprise Directory having personTypeCode as academic
 		 */
-		private void getActivePeopleFromED() {
+		public List<PeopleBean> getActivePeopleFromED() {
 
+			List<PeopleBean> people = new ArrayList<>();
 			int noCwidCount = 0;
 			String filter = "(&(objectClass=eduPerson)(weillCornellEduPersonTypeCode=academic))";
 			
@@ -177,15 +189,16 @@ public class AcademicFetchFromED {
 							log.info(s);
 						}
 						log.info("------------------------------------------------------------------------------------------------------------");
-						this.people.add(pb);
+						people.add(pb);
 				}
 			}
-				log.info("Number of people found: " + this.people.size());
+				log.info("Number of people found: " + people.size());
 				log.info("No of Records with no CWID: " + noCwidCount);
 			}
 			else {
 				log.info("No results found");
-			}		
+			}
+			return people;	
 		}
 		
 		/**
@@ -281,19 +294,25 @@ public class AcademicFetchFromED {
 				
 			}
 			sb.append("}}");
+			//log.info(sb.toString());
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				try{
+					String response = this.vivoClient.vivoUpdateApi(sb.toString());
+					log.info(response);
+				} catch(Exception  e) {
+					log.info("Api Exception", e);
+				}
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+				try {
+					SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+					runSparqlUpdateTemplate(sb.toString(), vivoJena);
+					if(vivoJena != null)
+						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+				} catch(IOException e) {
+					log.error("Error connecting to Jena database", e);
+				}
 			
-			log.info(sb.toString());
-			
-			try {
-				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
-				runSparqlUpdateTemplate(sb.toString(), vivoJena);
-				
-				if(vivoJena!= null)
-					this.jcf.returnConnectionToPool(vivoJena, "wcmcPeople");
-			} catch(IOException e) {
-				log.error("Error connecting to Jena database", e);
 			}
-			
 			insertInferenceTriples(pb);
 		}
 		
@@ -337,8 +356,7 @@ public class AcademicFetchFromED {
 			sb.append("<" + this.vivoNamespace + "arg2000028-"  + pb.getCwid().trim() + "> vitro:mostSpecificType vcard:Individual . \n");
 			sb.append("}}");
 			
-			
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("vitro-kb-inf");
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 
 			try{
 				vivoJena.executeUpdateQuery(sb.toString(),true);
@@ -346,7 +364,8 @@ public class AcademicFetchFromED {
 			catch(IOException e) {
 				log.error("Error connecting to Jena Database", e);
 			}
-			this.jcf.returnConnectionToPool(vivoJena, "vitro-kb-inf");
+			if(vivoJena != null)
+				this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 		}
 		
 		/**
@@ -485,31 +504,26 @@ public class AcademicFetchFromED {
 			String sparqlQuery = "PREFIX rdf:      <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 									"PREFIX foaf:     <http://xmlns.com/foaf/0.1/> \n" +
 									"SELECT  (count(rdf:type) as ?c) \n" +
-									"FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n" +
-									"WHERE \n" +
-									"{ \n" +
+									"WHERE {\n" +
+									"GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> {\n" +
 									"<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> rdf:type foaf:Person . \n" +
-									"}";
+									"}}";
+
+			log.info(sparqlQuery);
+
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 			
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
-			
-			com.hp.hpl.jena.query.ResultSet rs = runSparqlTemplate(sparqlQuery, vivoJena);
+			ResultSet rs = runSparqlTemplate(sparqlQuery, vivoJena);
 			
 			QuerySolution qs = rs.nextSolution();
 			count = Integer.parseInt(qs.get("c").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
-			
-			//Close the connection
-			if(vivoJena!= null)
-				this.jcf.returnConnectionToPool(vivoJena, "wcmcPeople");
-			
+			if(vivoJena != null)
+				this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+
 			if(count > 0)
 				return true;
 			else
-				return false;
-			
-			
-			
-			
+				return false;			
 		}
 		
 		/**
@@ -517,10 +531,8 @@ public class AcademicFetchFromED {
 		 * This function check for updates from ED and then apply them in VIVO. For email , displayName, lastName, Phone numbers, Primary Title etc.
 		 */
 		private void checkForUpdates(PeopleBean pb) {
-			ArrayList<String> updateList = new ArrayList<String>();
-			ArrayList<String> insertList = new ArrayList<String>();
-			String phone = "";
-			String middleName = "";
+			List<String> updateList = new ArrayList<String>();
+			List<String> insertList = new ArrayList<String>();
 			String sparqlQuery = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 					"PREFIX foaf: <http://xmlns.com/foaf/0.1/> \n" +
 					"PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n" +
@@ -528,9 +540,9 @@ public class AcademicFetchFromED {
 					"PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n" +
 					"PREFIX vcard: <http://www.w3.org/2006/vcard/ns#> \n" +
 					"SELECT ?label ?type ?phone ?title ?email ?firstName ?lastName ?middleName ?popsUrl\n" +
-					"FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n" +
 					"WHERE \n" +
 					"{ \n" +
+					"GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> {\n" +
 					"<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:personLabel ?label .\n" +
 					"<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> vitro:mostSpecificType ?type .\n" +
 					"<" + this.vivoNamespace + "hasTitle-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#title> ?title . \n" +
@@ -540,13 +552,13 @@ public class AcademicFetchFromED {
 					"OPTIONAL { <" + this.vivoNamespace + "hasEmail-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#email> ?email . }\n" +
 					"OPTIONAL { <" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> core:middleName ?middleName . }\n" +
 					"OPTIONAL { <" + this.vivoNamespace + "popsUrl-" + pb.getCwid().trim() + "> vcard:url ?popsUrl } \n" +
-					"}";
+					"}}";
 			
-			log.info(sparqlQuery);
+			log.debug(sparqlQuery);
 			SDBJenaConnect vivoJena;
 			try {
-				vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
-				com.hp.hpl.jena.query.ResultSet rs = runSparqlTemplate(sparqlQuery, vivoJena);
+				vivoJena = this.jcf.getConnectionfromPool("dataSet");
+				ResultSet rs = runSparqlTemplate(sparqlQuery, vivoJena);
 				QuerySolution qs = null;
 					if(rs.hasNext()) {
 						qs = rs.nextSolution();
@@ -711,7 +723,7 @@ public class AcademicFetchFromED {
 						
 						if(!updateList.isEmpty() && updateList.contains("MostSpecificType")) {
 							log.info("Updating inference triple for mostSpecificType update");
-							SDBJenaConnect vivoJenaInf = this.jcf.getConnectionfromPool("vitro-kb-inf");
+							SDBJenaConnect vivoJenaInf = this.jcf.getConnectionfromPool("dataSet");
 							sb.setLength(0);
 							
 							sb.append("PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n");
@@ -727,9 +739,8 @@ public class AcademicFetchFromED {
 			                sb.append("}");
 			                
 			                log.info("Update Query for person type: " + sb.toString());
-			                runSparqlUpdateTemplate(sb.toString(), vivoJenaInf);
-
-							this.jcf.returnConnectionToPool(vivoJenaInf, "vitro-kb-inf");
+							runSparqlUpdateTemplate(sb.toString(), vivoJenaInf);
+							this.jcf.returnConnectionToPool(vivoJenaInf, "dataSet");
 						}
 					}
 					
@@ -772,21 +783,15 @@ public class AcademicFetchFromED {
 		                log.info("Insert Query: " + sb.toString());
 		                runSparqlUpdateTemplate(sb.toString(), vivoJena);
 	                }
-					
 					if(vivoJena!= null)
-						this.jcf.returnConnectionToPool(vivoJena, "wcmcPeople");
+						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+					//Run inferencing on the updated triples
+					insertInferenceTriples(pb);
+	                
 					
-					
-					
-					
-			} catch(IOException e) {
-				// TODO Auto-generated catch block
-				log.error("IOException: ",e);
+			} catch(Exception e) {
+				log.error("Api Exception" ,e);
 			}
-			
-			//Run inferencing on the updated triples
-			
-			insertInferenceTriples(pb);
 			
 			
 		}
@@ -829,24 +834,24 @@ public class AcademicFetchFromED {
             sb.append("}");
 			
             log.info(sb.toString());
-			
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 			try {
 				runSparqlUpdateTemplate(sb.toString(), vivoJena);
 			} catch(IOException e) {
-				// TODO Auto-generated catch block
 				log.error("IOException: ",e);
 			}
 			if(vivoJena!= null)
-				this.jcf.returnConnectionToPool(vivoJena, "wcmcPeople");
-		}/**
+				this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+		}
+
+		/**
 		 * Template to fit in different JenaConnect queries.
 		 * @param sparqlQuery contains the query
 		 * @return ResultSet containing all the results
 		 * @throws IOException default exception thrown
 		 */
-		private com.hp.hpl.jena.query.ResultSet runSparqlTemplate(String sparqlQuery, SDBJenaConnect vivoJena) throws IOException {
-			com.hp.hpl.jena.query.ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery);		
+		private ResultSet runSparqlTemplate(String sparqlQuery, SDBJenaConnect vivoJena) throws IOException {
+			ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery, true);		
 			return rs;
 		}
 		
@@ -859,6 +864,4 @@ public class AcademicFetchFromED {
 		private void runSparqlUpdateTemplate(String sparqlQuery, SDBJenaConnect vivoJena) throws IOException {
 			vivoJena.executeUpdateQuery(sparqlQuery, true);
 		}
-		
-
 }

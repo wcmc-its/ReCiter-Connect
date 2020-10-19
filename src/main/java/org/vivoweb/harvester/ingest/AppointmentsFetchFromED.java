@@ -10,20 +10,28 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 
 import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.jena.query.QuerySolution;
+import org.apache.jena.query.ResultSet;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StopWatch;
 
 import reciter.connect.beans.vivo.*;
 import reciter.connect.database.ldap.LDAPConnectionFactory;
 import reciter.connect.database.mssql.MssqlConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
+import reciter.connect.vivo.api.client.VivoClient;
+
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
 
 import lombok.extern.slf4j.Slf4j;
 
-import com.hp.hpl.jena.query.QuerySolution;
 import com.unboundid.ldap.sdk.SearchResultEntry;
 
 
@@ -40,9 +48,6 @@ import com.unboundid.ldap.sdk.SearchResultEntry;
 @Component
 public class AppointmentsFetchFromED {
 
-	private List<String> people = new ArrayList<String>();
-	private ArrayList<OfaBean> ofaData = new ArrayList<OfaBean>();
-
 	SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 	
 	/**
@@ -53,12 +58,14 @@ public class AppointmentsFetchFromED {
 	
 	private Connection con = null;
 	
-	
 	/**
 	 * Jena connection factory object for all the apache jena sdb related connections
 	 */
 	@Autowired
 	private JenaConnectionFactory jcf;
+
+	@Autowired
+	private VivoClient vivoClient;
 	
 	/**
 	 * The default namespace for VIVO
@@ -71,43 +78,45 @@ public class AppointmentsFetchFromED {
 	@Autowired
 	private MssqlConnectionFactory mcf;
 	
-	Date now = new Date();
-	private String strDate = sdf.format(now);
-	
-	private String currYear = new SimpleDateFormat("yyyy").format(now);
+	private String currYear = new SimpleDateFormat("yyyy").format(new Date());
+
+	public Callable<String> getCallable(List<String> people) {
+        return new Callable<String>() {
+            public String call() throws Exception {
+                return execute(people);
+            }
+        };
+    }
 		
 		/**
 		 * This is the main execution method of the class
 		 * @throws IOException when connecting to ED
 		 */
-	public void execute() throws IOException {
-		
+	public String execute(List<String> people) throws IOException {
+		StopWatch stopWatch = new StopWatch("Appointments fetch performance");
+		stopWatch.start("Appointments updates");
 		int insertCount = 0;
 		int updateCount = 0;
+		List<OfaBean> ofaData = new ArrayList<>();
 		//Initialize connection pool and fill it with connection
-		this.con = this.mcf.getConnectionfromPool("ASMS");
-		
-		OfaBean ob1 = new OfaBean();
-		
-		EdDataInterface edi = new EdDataInterfaceImpl();
-		this.people = edi.getPeopleInVivo(this.jcf); //Get all the faculty in VIVO
-		
-		Iterator<String> it = this.people.iterator();
+		this.con = this.mcf.getAsmsConnectionfromPool("ASMS");
+		Iterator<String> it = people.iterator();
 		while(it.hasNext()) {
-		OfaBean ob = getRolesFromED(it.next()); //Get all the appointments in ED
-		ArrayList<EducationBean> edu = getEducationAndTraining(ob.getCwid()); //Get all the education and training data from OFA
-		ob.setEdu(edu);
-		this.ofaData.add(ob);
+			String cwid = it.next();
+			OfaBean ob = getRolesFromED(cwid); //Get all the appointments in ED
+			ArrayList<EducationBean> edu = getEducationAndTraining(ob.getCwid()); //Get all the education and training data from OFA
+			ob.setEdu(edu);
+			ofaData.add(ob);
 		}
 		
 		if(this.con!=null) {
 			this.mcf.returnConnectionToPool("ASMS", con);
 		}
 		
-		Iterator<OfaBean>  it1 = this.ofaData.iterator();
+		Iterator<OfaBean>  it1 = ofaData.iterator();
 		while(it1.hasNext()) {
+			OfaBean ob1 = it1.next();
 			log.info("#########################################################");
-			ob1 = it1.next();
 			if(!checkOfaDataInVivo(ob1)) {
 				log.info("Person: "+ob1.getCwid() + " does not has appointments in VIVO");
 				insertOfaDataInVivo(ob1);
@@ -126,10 +135,9 @@ public class AppointmentsFetchFromED {
 		log.info("New appointments fetched for " + insertCount + " people");
 		log.info("Appointments updated for " + updateCount + " people");
 		log.info("Appointments fetch completed successfully...");
-		
-		//Destroy jena connection pool
-		if(this.jcf != null)
-			this.jcf.destroyConnectionPool();
+		stopWatch.stop();
+		log.info("Appointment fetch Time taken: " + stopWatch.getTotalTimeSeconds() + "s");
+		return "Appointment fetch completed successfully for cwids: " + people.toString();
 	}
 		
 		/**
@@ -138,6 +146,8 @@ public class AppointmentsFetchFromED {
 		 * @return The bean which holds appointment and education data
 		 */
 		private OfaBean getRolesFromED(String cwid) {
+			Date now = new Date();
+			String strDate = sdf.format(now);
 			OfaBean ob = new OfaBean();
 			ArrayList<RoleBean> roles = new ArrayList<RoleBean>();
 			
@@ -192,8 +202,13 @@ public class AppointmentsFetchFromED {
 						rb.setStartDate(entry.getAttributeValue("weillCornellEduStartDate").substring(0, 4));
 						String ldapEndDate = entry.getAttributeValue("weillCornellEduEndDate").substring(0, 4) + "-" + entry.getAttributeValue("weillCornellEduEndDate").substring(4, 6) + "-" + entry.getAttributeValue("weillCornellEduEndDate").substring(6, 8);
 						try {
-							endDate = this.sdf.parse(ldapEndDate);
-							currDate = this.sdf.parse(this.strDate);
+							log.info("Ldap end date: " + ldapEndDate);
+							if(ldapEndDate.matches("[0-9]+") && ldapEndDate.length() > 2)
+								endDate = this.sdf.parse(ldapEndDate);
+							
+							log.info("current date: " + strDate);
+							if(strDate.matches("[0-9]+") && strDate.length() > 2)
+								currDate = this.sdf.parse(strDate);
 						} catch(ParseException e) {
 							log.error("ParseException", e);
 						}
@@ -443,7 +458,8 @@ public class AppointmentsFetchFromED {
 		 * @param ob The bean object containing role and education & training data both
 		 */
 		private void insertOfaDataInVivo(OfaBean ob) {
-			
+			Date now = new Date();
+			String strDate = sdf.format(now);
 			
 			StringBuilder sb = new StringBuilder();
 			sb.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
@@ -472,7 +488,7 @@ public class AppointmentsFetchFromED {
 						sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> rdfs:label \"" + rb.getTitleCode().trim() + "\" . \n");
 						sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> . \n");
 						sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> core:relates <" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> . \n");
-						sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> core:DateTimeValue \"" + this.strDate + "\" . \n");
+						sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> core:DateTimeValue \"" + strDate + "\" . \n");
 						sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> core:relatedBy <" + this.vivoNamespace + "position-" + rb.getSorId().trim() +"> . \n");
 						sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type core:Department . \n");
 						sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type core:AcademicDepartment . \n");
@@ -538,7 +554,7 @@ public class AppointmentsFetchFromED {
 					sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> rdfs:label \"" + rb.getTitleCode().trim() + "\" . \n");
 					sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> . \n");
 					sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> core:relates <" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> . \n");
-					sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> core:DateTimeValue \"" + this.strDate + "\" . \n");
+					sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() + "> core:DateTimeValue \"" + strDate + "\" . \n");
 					sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> core:relatedBy <" + this.vivoNamespace + "position-" + rb.getSorId().trim() +"> . \n");
 					sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type core:Department . \n");
 					sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type core:AcademicDepartment . \n");
@@ -601,7 +617,7 @@ public class AppointmentsFetchFromED {
 				sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> . \n");
 				sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:assignedBy <" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> .\n");
 				sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0002353 <" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> .\n");
-				sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + this.strDate + "\" .\n");
+				sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + strDate + "\" .\n");
 				sb.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> <http://vivoweb.org/ontology/core#abbreviation> \"" + edu.getDegreeName().trim() + "\" . \n");
 				sb.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> rdfs:label \"" + edu.getDegreeName().trim() + "\" . \n");
 				sb.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> core:relatedBy <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> . \n");
@@ -619,7 +635,7 @@ public class AppointmentsFetchFromED {
 				sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0000057 <" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> . \n");
 				sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0002234 <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> . \n");
 				sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> . \n");
-				sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + this.strDate + "\" .\n");
+				sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + strDate + "\" .\n");
 				sb.append("<" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> rdf:type core:DateTimeInterval . \n");
 				sb.append("<" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> core:end <" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> . \n");
 				sb.append("<" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> rdf:type core:DateTimeValue . \n");
@@ -632,14 +648,13 @@ public class AppointmentsFetchFromED {
 			sb.append("}}");
 			
 			
-			log.info(sb.toString());
+			//log.info(sb.toString());
 			
 			try {
-				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
+				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 				runSparqlUpdateTemplate(sb.toString(), vivoJena);
-				
 				if(vivoJena != null)
-					this.jcf.returnConnectionToPool(vivoJena, "wcmcOfa");
+					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			} catch(IOException e) {
 				log.error("Exception in connecting to Jena" ,e);
 			}
@@ -709,13 +724,11 @@ public class AppointmentsFetchFromED {
 			if(insertCount > 0 ) {
 				log.info("Inserting inference triples for " + ob.getCwid());
 				try {
-					SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("vitro-kb-inf");
+					SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 					runSparqlUpdateTemplate(sb.toString(), vivoJena);
-					
 					if(vivoJena != null)
-						this.jcf.returnConnectionToPool(vivoJena, "vitro-kb-inf");
+						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 				} catch(IOException e) {
-					// TODO Auto-generated catch block
 					log.error("Exception in connecting to Jena" ,e);
 				}
 			}
@@ -732,7 +745,8 @@ public class AppointmentsFetchFromED {
 		 * @throws IOException thrown by SDBJenaConnect
 		 */
 		private int checkForUpdates(OfaBean ob, String cwid) throws IOException {
-			
+			Date now = new Date();
+			String strDate = sdf.format(now);
 			int updateCount = 0;
 			
 			ArrayList<RoleBean> rb = ob.getRoles();
@@ -743,14 +757,14 @@ public class AppointmentsFetchFromED {
 			for(RoleBean role: rb) {
 				StringBuffer sb = new StringBuffer();
 				sb.append("SELECT ?obj \n");
-				sb.append("FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");
 				sb.append("WHERE {\n");
+				sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> {\n");
 				sb.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> <http://vivoweb.org/ontology/core#dateTimeInterval> ?obj . \n");
-				sb.append("}");
+				sb.append("}}");
 				
-				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
+				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 				
-				com.hp.hpl.jena.query.ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
+				ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
 				
 				
 				if(!rs.hasNext()) {
@@ -780,7 +794,7 @@ public class AppointmentsFetchFromED {
 						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> rdfs:label \"" + role.getTitleCode().trim() + "\" . \n");
 						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> . \n");
 						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:relates <" + this.vivoNamespace + "org-u" + role.getDeptCode() + "> . \n");
-						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:DateTimeValue \"" + this.strDate + "\" . \n");
+						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:DateTimeValue \"" + strDate + "\" . \n");
 						insertQuery.append("<" + this.vivoNamespace + "org-u" + role.getDeptCode() + "> core:relatedBy <" + this.vivoNamespace + "position-" + role.getSorId().trim() +"> . \n");
 						insertQuery.append("<" + this.vivoNamespace + "org-u" + role.getDeptCode() + "> rdf:type core:AcademicDepartment . \n");
 						insertQuery.append("<" + this.vivoNamespace + "org-u" + role.getDeptCode() + "> vitro:mostSpecificType core:AcademicDepartment . \n");
@@ -868,7 +882,7 @@ public class AppointmentsFetchFromED {
 						updateQuery.append("} \n");
 						updateQuery.append("INSERT { \n");
 						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> . \n");
-						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:DateTimeValue \"" + this.strDate + "\" . \n");
+						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:DateTimeValue \"" + strDate + "\" . \n");
 						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
 						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> . \n");
 						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-" + role.getEndDate().trim() + "> . \n");
@@ -910,7 +924,7 @@ public class AppointmentsFetchFromED {
 						updateQuery.append("} \n");
 						updateQuery.append("INSERT { \n");
 						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + "> . \n");
-						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:DateTimeValue \"" + this.strDate + "\" . \n");
+						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:DateTimeValue \"" + strDate + "\" . \n");
 						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> rdf:type core:DateTimeInterval . \n");
 						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> core:start <" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> . \n");
 						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> vitro:mostSpecificType core:DateTimeInterval . \n");
@@ -966,14 +980,9 @@ public class AppointmentsFetchFromED {
 					else
 						log.info("No updates are necessary for " + ob.getCwid().trim() + " for position-" + role.getSorId().trim());
 				}
-					
-				
-				
-				
-				
 				//Close the connection
 				if(vivoJena != null)
-					this.jcf.returnConnectionToPool(vivoJena, "wcmcOfa");
+					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			}
 			//Checking for education and training updates
 			for(EducationBean edu: ebean) {
@@ -981,16 +990,16 @@ public class AppointmentsFetchFromED {
 				
 				sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
 				sb.append("SELECT ?obj \n");
-				sb.append("FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");
 				sb.append("WHERE { \n");
+				sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> {\n");
 				sb.append("<" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> core:relatedBy <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + ">");
-				sb.append("}");
+				sb.append("}}");
 				
 				//log.info(sb.toString());
 				
-				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
+				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 				
-				com.hp.hpl.jena.query.ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
+				ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
 				
 				
 				if(rs != null && !rs.hasNext()) {
@@ -1013,7 +1022,7 @@ public class AppointmentsFetchFromED {
 					insertQuery.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> . \n");
 					insertQuery.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:assignedBy <" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> .\n");
 					insertQuery.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0002353 <" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> .\n");
-					insertQuery.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + this.strDate + "\" .\n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + strDate + "\" .\n");
 					insertQuery.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> <http://vivoweb.org/ontology/core#abbreviation> \"" + edu.getDegreeName().trim() + "\" . \n");
 					insertQuery.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> rdfs:label \"" + edu.getDegreeName().trim() + "\" . \n");
 					insertQuery.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> core:relatedBy <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> . \n");
@@ -1030,7 +1039,7 @@ public class AppointmentsFetchFromED {
 					insertQuery.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0000057 <" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> . \n");
 					insertQuery.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0002234 <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> . \n");
 					insertQuery.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> . \n");
-					insertQuery.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + this.strDate + "\" .\n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + strDate + "\" .\n");
 					insertQuery.append("<" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> rdf:type core:DateTimeInterval . \n");
 					insertQuery.append("<" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> core:end <" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> . \n");
 					insertQuery.append("<" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> rdf:type core:DateTimeValue . \n");
@@ -1061,10 +1070,10 @@ public class AppointmentsFetchFromED {
 					sb.setLength(0);
 					sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
 					sb.append("SELECT ?instituteFk \n");
-					sb.append("FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");
 					sb.append("WHERE { \n");
+					sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> {\n");
 					sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> core:assignedBy ?instituteFk");
-					sb.append("}");
+					sb.append("}}");
 					
 					rs = runSparqlTemplate(sb.toString(), vivoJena);
 					
@@ -1099,7 +1108,7 @@ public class AppointmentsFetchFromED {
 						sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0000057 <" + this.vivoNamespace + "org-" + instituteFk + "> . \n");
 						sb.append("}");
 						
-						log.info(sb.toString());
+						//log.info(sb.toString());
 						try {
 							runSparqlUpdateTemplate(sb.toString(), vivoJena);
 						} catch(IOException e) {
@@ -1112,7 +1121,7 @@ public class AppointmentsFetchFromED {
 				}
 				//Close the connection
 				if(vivoJena != null)
-					this.jcf.returnConnectionToPool(vivoJena, "wcmcOfa");
+					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 				
 			}
 			
@@ -1132,7 +1141,8 @@ public class AppointmentsFetchFromED {
 		 * @param cwid This is the unique identifier of the person
 		 */
 		private void syncAppointmentsInVivo(ArrayList<RoleBean> edRole, String cwid) {
-			
+			Date now = new Date();
+			String strDate = sdf.format(now);
 			ArrayList<RoleBean> vivoRole = new ArrayList<RoleBean>();
 			
 			StringBuilder sb = new StringBuilder();
@@ -1141,8 +1151,8 @@ public class AppointmentsFetchFromED {
 			sb.append("PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n");
 			sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
 			sb.append("SELECT ?position ?org ?start ?end ?dateTime \n");
-			sb.append("FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");
 			sb.append("WHERE {\n");
+			sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> {\n");
 			sb.append("<" + this.vivoNamespace + "cwid-" + cwid + "> core:relatedBy ?position . \n");
 			sb.append("?position a core:Position . \n");
 			sb.append("?position core:relates ?org . \n");
@@ -1151,13 +1161,13 @@ public class AppointmentsFetchFromED {
 			sb.append("OPTIONAL {?dateTime a core:DateTimeInterval . }\n");
 			sb.append("OPTIONAL {?dateTime core:start ?start . }\n");
 			sb.append("OPTIONAL {?dateTime core:end ?end . }\n");
-			sb.append("}");
+			sb.append("}}");
 
 			
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 			
 			try {
-				com.hp.hpl.jena.query.ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
+				ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
 				
 				
 				while(rs.hasNext()) {
@@ -1189,9 +1199,7 @@ public class AppointmentsFetchFromED {
 				// TODO Auto-generated catch block
 				log.error("IOException" ,e);
 			}
-		
-			this.jcf.returnConnectionToPool(vivoJena, "wcmcOfa");
-			
+			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			for(RoleBean r: vivoRole) {
 				//try{
 					//log.info(r.toString());
@@ -1252,7 +1260,7 @@ public class AppointmentsFetchFromED {
 								sb.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> vitro:mostSpecificType core:DateTimeInterval . \n");
 								sb.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
 							}
-							sb.append("<" + this.vivoNamespace + "position-" + r.getSorId().trim() + "> core:DateTimeValue \"" + this.strDate + "\" . \n");
+							sb.append("<" + this.vivoNamespace + "position-" + r.getSorId().trim() + "> core:DateTimeValue \"" + strDate + "\" . \n");
 							sb.append("} \n");
 							if(r.getStartDate() == null) {
 								sb.append("}");
@@ -1274,15 +1282,14 @@ public class AppointmentsFetchFromED {
 							
 							log.info(sb.toString());
 							
-							vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
+							vivoJena = this.jcf.getConnectionfromPool("dataSet");
 							
 							try {
 								runSparqlUpdateTemplate(sb.toString(), vivoJena);
 							} catch(IOException e) {
-								// TODO Auto-generated catch block
 								log.error("IOException" ,e);
 							}
-							this.jcf.returnConnectionToPool(vivoJena, "wcmcOfa");
+							this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 						}
 						
 					}
@@ -1313,7 +1320,7 @@ public class AppointmentsFetchFromED {
 						
 						log.info(sb.toString());
 						
-						vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
+						vivoJena = this.jcf.getConnectionfromPool("dataSet");
 						
 						try {
 							runSparqlUpdateTemplate(sb.toString(), vivoJena);
@@ -1321,8 +1328,7 @@ public class AppointmentsFetchFromED {
 							// TODO Auto-generated catch block
 							log.error("IOException" ,e);
 						}
-						this.jcf.returnConnectionToPool(vivoJena, "wcmcOfa");
-						
+						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 						//Delete from inference Graph
 						
 						
@@ -1346,7 +1352,7 @@ public class AppointmentsFetchFromED {
 						
 						log.info(sb.toString());
 						
-						vivoJena = this.jcf.getConnectionfromPool("vitro-kb-inf");
+						vivoJena = this.jcf.getConnectionfromPool("dataSet");
 						
 						try {
 							runSparqlUpdateTemplate(sb.toString(), vivoJena);
@@ -1354,8 +1360,7 @@ public class AppointmentsFetchFromED {
 							// TODO Auto-generated catch block
 							log.error("IOException" ,e);
 						}
-						this.jcf.returnConnectionToPool(vivoJena, "vitro-kb-inf");
-						
+						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 						
 					}
 				/*}
@@ -1376,32 +1381,23 @@ public class AppointmentsFetchFromED {
 			int count = 0;
 			StringBuffer sb = new StringBuffer();
 			sb.append("SELECT  (count(?o) as ?positionCount) \n");
-			sb.append("FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");  // While using COUNT - FROM keyword does not work with SDBJenaConnect
 			sb.append("WHERE \n");
 			sb.append("{ \n");
+			sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> { \n");
 			sb.append("<" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> ?p ?o . \n");
-			sb.append("}");
+			sb.append("}}");
 			
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
-			
-			com.hp.hpl.jena.query.ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
-			
-			
-				QuerySolution qs = rs.nextSolution();
-			
-			
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+			ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
+			QuerySolution qs = rs.nextSolution();
 			count = Integer.parseInt(qs.get("positionCount").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
-			
 			//Close the connection
 			if(vivoJena!= null)
-				this.jcf.returnConnectionToPool(vivoJena, "wcmcOfa");
-			
+				this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			if(count > 0)
 				return true;
 			
-			return false;
-			
-			
+			return false;	
 			
 		}
 		
@@ -1411,12 +1407,8 @@ public class AppointmentsFetchFromED {
 		 * @return ResultSet containing all the results
 		 * @throws IOException default exception thrown
 		 */
-		private com.hp.hpl.jena.query.ResultSet runSparqlTemplate(String sparqlQuery, SDBJenaConnect vivoJena) throws IOException {
-			
-			com.hp.hpl.jena.query.ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery);		
-			return rs;
-			
-		
+		private ResultSet runSparqlTemplate(String sparqlQuery, SDBJenaConnect vivoJena) throws IOException {		
+			return vivoJena.executeSelectQuery(sparqlQuery, true);
 		}
 		
 		/**
