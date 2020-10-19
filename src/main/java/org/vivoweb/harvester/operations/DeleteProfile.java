@@ -344,7 +344,7 @@ public class DeleteProfile {
 			
 			sparql = "SELECT ?obj \n" +
 				 "WHERE { \n" +
-				 "GRAPH <http://vitro.mannlib.cornell.edu/default/vitro-kb-2> \n" +
+				 "GRAPH <http://vitro.mannlib.cornell.edu/default/vitro-kb-2> {\n" +
 				 "<" + this.vivoNamespace + "cwid-" + cwid + "> <http://vitro.mannlib.cornell.edu/ns/vitro/public#mainImage> ?obj . \n" +
 				 "}}";
 			 rs = vivoJena.executeSelectQuery(sparql, true);
