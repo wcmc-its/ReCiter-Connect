@@ -1,35 +1,37 @@
 package org.vivoweb.harvester.ingest;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Iterator;
-
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
+
+import com.unboundid.ldap.sdk.SearchResultEntry;
 
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.jena.query.QuerySolution;
 import org.apache.jena.query.ResultSet;
-import org.json.JSONArray;
-import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StopWatch;
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
 
 import lombok.extern.slf4j.Slf4j;
-
-import com.unboundid.ldap.sdk.SearchResultEntry;
-
 import reciter.connect.beans.vivo.PeopleBean;
 import reciter.connect.database.ldap.LDAPConnectionFactory;
+import reciter.connect.database.mysql.MysqlConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
 import reciter.connect.vivo.IngestType;
 import reciter.connect.vivo.api.client.VivoClient;
-import reciter.connect.vivo.sdb.VivoGraphs;
 
 /**
  * @author szd2013
@@ -53,6 +55,11 @@ public class AcademicFetchFromED {
 
 	@Autowired
 	private JenaConnectionFactory jcf;
+
+	@Autowired
+	private MysqlConnectionFactory mycf;
+
+	private Map<String, String> vivoCoiMap = new HashMap<>();
 	
 	private String ingestType = System.getenv("INGEST_TYPE");
 	
@@ -97,6 +104,7 @@ public class AcademicFetchFromED {
 			else {
 				log.info("Person: "+pb.getCwid() + " already exist in VIVO");
 				checkForUpdates(pb);
+				syncCOIData(pb);
 				//syncPersonTypes(pb);
 			}
 			log.info("################################ End of " + pb.getCwid() + " - " + pb.getDisplayName() + " -  Insert/Update Operation ###################");
@@ -119,7 +127,7 @@ public class AcademicFetchFromED {
 
 			List<PeopleBean> people = new ArrayList<>();
 			int noCwidCount = 0;
-			String filter = "(&(objectClass=eduPerson)(weillCornellEduPersonTypeCode=academic))";
+			String filter = "(&(objectClass=eduPerson)(weillCornellEduCWID=col2004)(weillCornellEduPersonTypeCode=academic))";
 			
 			List<SearchResultEntry> results = lcf.searchWithBaseDN(filter,"ou=people,dc=weill,dc=cornell,dc=edu");
 			
@@ -253,6 +261,9 @@ public class AcademicFetchFromED {
 			sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() +"> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
 			for(String nsType: pb.getNsTypes()) {
 				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> rdf:type " + nsType + " . \n");
+			}
+			if(this.vivoCoiMap.containsKey(pb.getCwid())) {
+				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> \"" + this.vivoCoiMap.get(pb.getCwid()) + "\" . \n");
 			}
 			sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:personLabel \"" + pb.getDisplayName().trim() + "\" . \n");
 			sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:cwid \"" + pb.getCwid().trim() + "\" . \n");
@@ -842,6 +853,96 @@ public class AcademicFetchFromED {
 			}
 			if(vivoJena!= null)
 				this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+		}
+
+		/**
+		 * This function will sync all the personTypeCodes from ED with VIVO rdf types
+		 * @param pb The PeopleBean conatining all people information from ED
+		 */
+		private void syncCOIData(PeopleBean pb) {
+			
+			log.info("Syncing VIVO COI data from InfoED with VIVO for " + pb.getCwid());
+			if(this.vivoCoiMap.containsKey(pb.getCwid())) {
+				StringBuilder sb = new StringBuilder();
+				sb.append("WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n");
+				sb.append("DELETE { \n");
+				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> ?o .\n");
+				sb.append("} \n");
+				sb.append("INSERT { \n");
+				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> \"" + this.vivoCoiMap.get(pb.getCwid()) + "\" . \n");
+				sb.append("} \n");
+				sb.append("WHERE { \n");
+				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> ?o .\n");
+				sb.append("}");
+				
+				log.info(sb.toString());
+				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+				try {
+					runSparqlUpdateTemplate(sb.toString(), vivoJena);
+				} catch(IOException e) {
+					log.error("IOException: ",e);
+				}
+				if(vivoJena!= null)
+					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+			} else {
+				log.info("No external relationships exist for " + pb.getCwid());
+			}
+		}
+
+		public void getCOIData() {
+			Connection con = this.mycf.getConnectionfromPool();
+			String cwid = null;
+			String coi = null;
+			
+			StringBuilder selectQuery = new StringBuilder();
+			
+			//selectQuery.append(" set session group_concat_max_len = 90000");
+			selectQuery.append("select p.cwid, \n");
+			selectQuery.append("concat(conflictsDescription,group_concat(distinct activityGroupData separator ''),\"</div>\" ) as conflicts \n");
+			selectQuery.append("from (select cwid, \n");
+			selectQuery.append("concat(\"<div id='conflict'><span class='activity-group-label'>\",vivo_pops_activity_group,\": </span>\",\"<span class='activity-group-data'>\",replace(replace(group_concat(distinct entity order by entity separator '; '),\"(*)\",\"\"),\" ;\",\";\"),\"</span></div>\") as activityGroupData \n");
+			selectQuery.append("from v_coi_vivo_activity_group \n");
+			selectQuery.append("group by cwid, vivo_pops_activity_group) z\n");
+			selectQuery.append("join (select cwid, concat(\"<div id='conflicts-description'>Relationships reported by Dr. \",last_name,\" as of \",\n");
+			selectQuery.append("Date_Format(now(),'%M %d, %Y'), \".</div><div id='conflicts'>\") as conflictsDescription \n");
+			selectQuery.append("from v_coi_vivo_activity_group) p on p.cwid = z.cwid \n");
+			selectQuery.append("where p.cwid is not null \n");
+			selectQuery.append("group by p.cwid");
+
+			log.info(selectQuery.toString());
+			PreparedStatement ps = null;
+			java.sql.ResultSet rs = null;
+			try {	
+					ps = con.prepareStatement(selectQuery.toString());
+					ps.addBatch("set session group_concat_max_len = 90000");
+					ps.executeBatch();
+					rs = ps.executeQuery();
+					while(rs.next()) {
+						if(rs.getString(1) != null)
+							cwid = rs.getString(1);
+						coi = rs.getString(2);
+						
+						this.vivoCoiMap.put(cwid, coi);
+						
+					}
+				}
+			catch(SQLException e) {
+				log.error("SQLException" , e);
+			}
+			finally {
+				try{
+					if(ps!=null)
+						ps.close();
+					if(rs!=null)
+						rs.close();
+					if(con != null)
+						this.mycf.returnConnectionToPool(con);
+				}
+				catch(Exception e) {
+					log.error("Exception",e);
+				}
+				
+			}
 		}
 
 		/**
