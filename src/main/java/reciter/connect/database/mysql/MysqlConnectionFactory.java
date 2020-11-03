@@ -59,11 +59,11 @@ public class MysqlConnectionFactory {
 	 */
 	@Inject
 	@Autowired(required=true)
-	public MysqlConnectionFactory(@Value("${mysql.pubadmin.db.username}") String username, Environment env, @Value("${mysql.pubadmin.db.url}") String url) {
+	public MysqlConnectionFactory(@Value("${mysql.vivo.coi.db.username}") String username, Environment env, @Value("${mysql.vivo.coi.db.url}") String url) {
 		this.username = username;
-		this.password = env.getProperty("MYSQL_PUBADMIN_DB_PASSWORD");
+		this.password = env.getProperty("VIVO_COI_DB_PASSWORD");
 		this.url = url;
-		//initialize();
+		initialize();
 	}
 	
 	/**
