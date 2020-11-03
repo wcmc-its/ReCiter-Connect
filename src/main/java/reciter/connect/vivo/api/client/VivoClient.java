@@ -46,8 +46,8 @@ public class VivoClient {
     public String vivoUpdateApi(String updateQuery) {
 
         LinkedMultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("email", vivoApiUsername);
-        body.add("password", vivoApiPassword);
+        body.add("email", this.vivoApiUsername);
+        body.add("password", this.vivoApiPassword);
         body.add("update", updateQuery);
         
          return this.webClient.post()
