@@ -15,23 +15,19 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.stream.Collectors;
 import java.util.Map.Entry;
 import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
 
 import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.jena.query.QuerySolution;
+import org.apache.jena.query.ResultSet;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StopWatch;
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
 
 import lombok.extern.slf4j.Slf4j;
-
-import org.apache.jena.query.QuerySolution;
-import org.apache.jena.query.ResultSet;
-import org.json.JSONArray;
-import org.json.JSONObject;
-
 import reciter.connect.beans.vivo.GrantBean;
 import reciter.connect.database.mssql.MssqlConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
@@ -1445,7 +1441,7 @@ public class GrantsFetchFromED {
 				}
 			
 			sb.append("}}");
-			log.info(sb.toString());
+			//log.info(sb.toString());
 			if(ingestType.equals(IngestType.VIVO_API.toString())) {
 				try{
 					String response = this.vivoClient.vivoUpdateApi(sb.toString());
