@@ -47,8 +47,6 @@ import com.unboundid.ldap.sdk.SearchResultEntry;
 @Slf4j
 @Component
 public class AppointmentsFetchFromED {
-
-	SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 	
 	/**
 	 * LDAP connection factory for all enterprise directory related connections
@@ -76,9 +74,7 @@ public class AppointmentsFetchFromED {
 	 * Mssql connection factory object for all the mysql related connections
 	 */
 	@Autowired
-	private MssqlConnectionFactory mcf;
-	
-	private String currYear = new SimpleDateFormat("yyyy").format(new Date());
+	private MssqlConnectionFactory mcf; 
 
 	public Callable<String> getCallable(List<String> people) {
         return new Callable<String>() {
@@ -147,6 +143,7 @@ public class AppointmentsFetchFromED {
 		 */
 		private OfaBean getRolesFromED(String cwid) {
 			Date now = new Date();
+			SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 			String strDate = sdf.format(now);
 			OfaBean ob = new OfaBean();
 			ArrayList<RoleBean> roles = new ArrayList<RoleBean>();
@@ -204,11 +201,11 @@ public class AppointmentsFetchFromED {
 						try {
 							log.info("Ldap end date: " + ldapEndDate);
 							if(ldapEndDate.matches("^\\d{4}-\\d{2}-\\d{2}$") && ldapEndDate.length() > 2)
-								endDate = this.sdf.parse(ldapEndDate);
+								endDate = sdf.parse(ldapEndDate);
 							
 							log.info("current date: " + strDate);
 							if(strDate.matches("^\\d{4}-\\d{2}-\\d{2}$") && strDate.length() > 2)
-								currDate = this.sdf.parse(strDate);
+								currDate = sdf.parse(strDate);
 						} catch(ParseException e) {
 							log.error("ParseException", e);
 						}
@@ -467,6 +464,7 @@ public class AppointmentsFetchFromED {
 		 */
 		private void insertOfaDataInVivo(OfaBean ob) {
 			Date now = new Date();
+			SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 			String strDate = sdf.format(now);
 			
 			StringBuilder sb = new StringBuilder();
@@ -754,6 +752,8 @@ public class AppointmentsFetchFromED {
 		 */
 		private int checkForUpdates(OfaBean ob, String cwid) throws IOException {
 			Date now = new Date();
+			String currYear = new SimpleDateFormat("yyyy").format(new Date());
+			SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 			String strDate = sdf.format(now);
 			int updateCount = 0;
 			
@@ -918,7 +918,7 @@ public class AppointmentsFetchFromED {
 						
 					}
 					//Update to delete any end date which is for a current appointment
-					else if(endDate.equals(this.currYear) && role.getEndDate().equals("CURRENT")) {
+					else if(endDate.equals(currYear) && role.getEndDate().equals("CURRENT")) {
 						log.info("Update existing appointment position-" + role.getSorId().trim());
 						StringBuffer updateQuery = new StringBuffer();
 						updateQuery.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
@@ -1182,6 +1182,7 @@ public class AppointmentsFetchFromED {
 		 */
 		private void syncAppointmentsInVivo(ArrayList<RoleBean> edRole, String cwid) {
 			Date now = new Date();
+			SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 			String strDate = sdf.format(now);
 			ArrayList<RoleBean> vivoRole = new ArrayList<RoleBean>();
 			
