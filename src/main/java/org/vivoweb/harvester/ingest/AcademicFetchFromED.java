@@ -872,7 +872,7 @@ public class AcademicFetchFromED {
 				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> \"" + this.vivoCoiMap.get(pb.getCwid()) + "\" . \n");
 				sb.append("} \n");
 				sb.append("WHERE { \n");
-				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> ?o .\n");
+				sb.append("OPTIONAL {<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> ?o .}\n");
 				sb.append("}");
 				
 				log.info(sb.toString());
