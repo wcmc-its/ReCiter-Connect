@@ -203,11 +203,11 @@ public class AppointmentsFetchFromED {
 						String ldapEndDate = entry.getAttributeValue("weillCornellEduEndDate").substring(0, 4) + "-" + entry.getAttributeValue("weillCornellEduEndDate").substring(4, 6) + "-" + entry.getAttributeValue("weillCornellEduEndDate").substring(6, 8);
 						try {
 							log.info("Ldap end date: " + ldapEndDate);
-							if(ldapEndDate.matches("[0-9]+") && ldapEndDate.length() > 2)
+							if(ldapEndDate.matches("^\\d{4}-\\d{2}-\\d{2}$") && ldapEndDate.length() > 2)
 								endDate = this.sdf.parse(ldapEndDate);
 							
 							log.info("current date: " + strDate);
-							if(strDate.matches("[0-9]+") && strDate.length() > 2)
+							if(strDate.matches("^\\d{4}-\\d{2}-\\d{2}$") && strDate.length() > 2)
 								currDate = this.sdf.parse(strDate);
 						} catch(ParseException e) {
 							log.error("ParseException", e);
@@ -296,6 +296,7 @@ public class AppointmentsFetchFromED {
 		 * @return roles list of role bean objects
 		 */
 		private ArrayList<RoleBean> checkForTenureTrack(ArrayList<RoleBean> roles) {
+			List<RoleBean> indexesToRemove = new ArrayList<>();
 			for(int i=0 ; i < roles.size() -1 ; i++) {
 				int index = i;
 				for(int j = i+1; j < roles.size(); j++){
@@ -305,20 +306,26 @@ public class AppointmentsFetchFromED {
 						log.info(roles.get(j).getDepartment() + " && " + roles.get(index).getDepartment() +  " :: " + roles.get(j).getTitleCode() + " && " + roles.get(index).getTitleCode() );
 						if(Integer.parseInt(roles.get(j).getStartDate()) > Integer.parseInt(roles.get(index).getStartDate())){
 							roles.get(j).setStartDate(roles.get(index).getStartDate());
-							roles.remove(index);
+							indexesToRemove.add(roles.get(index));
 						} else if(Integer.parseInt(roles.get(j).getStartDate()) == Integer.parseInt(roles.get(index).getStartDate())) {
-							if(roles.get(j).getEndDate() != null && roles.get(j).getEndDate().equals("CURRENT")) {
-								roles.remove(index);
+							if(roles.get(j).getEndDate() != null 
+								&& 
+								roles.get(j).getEndDate().equals("CURRENT")
+								) {
+								indexesToRemove.add(roles.get(index));
 								break;
 							}
-							if(roles.get(index).getEndDate() != null && roles.get(index).getEndDate().equals("CURRENT")) {
-								roles.remove(j);
+							if(roles.get(index).getEndDate() != null 
+								&& 
+								roles.get(index).getEndDate().equals("CURRENT")
+								) {
+								indexesToRemove.add(roles.get(j));
 								break;
 							}
 							
 						} else {
 							roles.get(index).setStartDate(roles.get(j).getStartDate());
-							roles.remove(j);
+							indexesToRemove.add(roles.get(j));
 							break;
 						}
 						
@@ -326,6 +333,7 @@ public class AppointmentsFetchFromED {
 					}
 				}
 			}
+			roles.removeAll(indexesToRemove);
 			
 			for(RoleBean rb: roles) {
 				log.info("Position - " + rb.toString());
@@ -1066,13 +1074,16 @@ public class AppointmentsFetchFromED {
 					//Check for change of institution
 					
 					edu.setCrudStatus("UPDATE");
-					int instituteFk =0;
+					int instituteFk = 0;
+					String institutionLabel = null;
 					sb.setLength(0);
+					sb.append("PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>");
 					sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
-					sb.append("SELECT ?instituteFk \n");
+					sb.append("SELECT ?instituteFk ?institutionLabel\n");
 					sb.append("WHERE { \n");
 					sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> {\n");
-					sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> core:assignedBy ?instituteFk");
+					sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> core:assignedBy ?instituteFk . \n");
+					sb.append("?instituteFk rdfs:label ?institutionLabel . ");
 					sb.append("}}");
 					
 					rs = runSparqlTemplate(sb.toString(), vivoJena);
@@ -1080,6 +1091,7 @@ public class AppointmentsFetchFromED {
 					if(rs.hasNext()) {
 						QuerySolution qs = rs.nextSolution();
 						instituteFk = Integer.parseInt(qs.get("instituteFk").toString().replace(this.vivoNamespace + "org-", ""));
+						institutionLabel = qs.get("institutionLabel").toString();
 					}
 					if(instituteFk != Integer.parseInt(edu.getInstituteFk())) {
 						log.info("Insitition needs to be updated to " + edu.getInstituion() + " for educationalTraining-" + edu.getDegreePk().trim() + " with cwid " + ob.getCwid().trim());
@@ -1112,12 +1124,40 @@ public class AppointmentsFetchFromED {
 						try {
 							runSparqlUpdateTemplate(sb.toString(), vivoJena);
 						} catch(IOException e) {
-							// TODO Auto-generated catch block
+							log.error("IOException" ,e);
+						}
+					} 
+					else	
+						log.info("No updates are necessary for " + ob.getCwid().trim() + " for educationalTraining-" + edu.getDegreePk().trim());
+					
+					//Check for insitution name 
+					if(institutionLabel != null && !institutionLabel.equalsIgnoreCase(edu.getInstituion())) {
+						log.info("Insitition Label needs to be updated to " + edu.getInstituion() + " for educationalTraining-" + edu.getDegreePk().trim() + " with cwid " + ob.getCwid().trim());
+						sb.setLength(0);
+						sb.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
+						sb.append("PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>");
+						sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
+						sb.append("PREFIX obo: <http://purl.obolibrary.org/obo/> \n");
+						sb.append("WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");
+						sb.append("DELETE { \n");
+						sb.append("<" + this.vivoNamespace + "org-" + instituteFk + "> rdfs:label ?label .\n");
+						sb.append("} \n");
+						sb.append("INSERT { \n");
+						sb.append("<" + this.vivoNamespace + "org-" + instituteFk + "> rdfs:label \"" + edu.getInstituion() + "\" .\n");
+						sb.append("} \n");
+						sb.append("WHERE { \n");
+						sb.append("<" + this.vivoNamespace + "org-" + instituteFk + "> rdfs:label ?label .\n");
+						sb.append("}");
+						
+						//log.info(sb.toString());
+						try {
+							runSparqlUpdateTemplate(sb.toString(), vivoJena);
+						} catch(IOException e) {
 							log.error("IOException" ,e);
 						}
 					}
 					else	
-						log.info("No updates are necessary for " + ob.getCwid().trim() + " for educationalTraining-" + edu.getDegreePk().trim());
+						log.info("No updates are necessary for institution name " + ob.getCwid().trim() + " for educationalTraining-" + edu.getDegreePk().trim());
 				}
 				//Close the connection
 				if(vivoJena != null)

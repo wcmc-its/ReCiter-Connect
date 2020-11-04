@@ -31,6 +31,7 @@ import reciter.engine.analysis.ReCiterArticleAuthorFeature;
 import reciter.engine.analysis.ReCiterArticleFeature;
 import reciter.engine.analysis.ReCiterArticleFeature.ArticleKeyword;
 import reciter.engine.analysis.ReCiterArticleFeature.ArticleKeyword.KeywordType;
+import reciter.model.pubmed.MedlineCitationJournalISSN;
 
 @Slf4j
 @Service
@@ -108,9 +109,11 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                 Date citationDate = null;
                 try {
                     citationDate = this.sdf.parse(dateUpdated);
+                    
                 } catch (ParseException e) {
                     log.error("ParseException", e);
                 }
+                String citeDate = this.sdf.format(citationDate);
                 sb.append(publicationUrl + " <http://purl.org/spar/c4o/hasGlobalCitationFrequency> <"
                         + JenaConnectionFactory.nameSpace + "citation-pubid" + articleFeature.getPmid() + "> .\n");
                 sb.append("<" + JenaConnectionFactory.nameSpace + "citation-pubid" + articleFeature.getPmid()
@@ -122,22 +125,22 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                     this.cal.setTime(citationDate);
                     int month = this.cal.get(Calendar.MONTH) + 1; // Since calender month start with 0
                     sb.append("<" + JenaConnectionFactory.nameSpace + "citation-pubid" + articleFeature.getPmid()
-                            + "> core:dateTimeValue <" + JenaConnectionFactory.nameSpace + "citation-daymonthyear"
+                            + "> core:dateTimeValue <" + JenaConnectionFactory.nameSpace + "daymonthyear"
                             + this.cal.get(Calendar.DAY_OF_MONTH) + (month < 10 ? ("0" + month) : (month))
                             + this.cal.get(Calendar.YEAR) + "> . \n");
-                    sb.append("<" + JenaConnectionFactory.nameSpace + "citation-daymonthyear"
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "daymonthyear"
                             + this.cal.get(Calendar.DAY_OF_MONTH) + (month < 10 ? ("0" + month) : (month))
                             + this.cal.get(Calendar.YEAR) + "> rdf:type core:DateTimeValue . \n");
-                    sb.append("<" + JenaConnectionFactory.nameSpace + "citation-daymonthyear"
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "daymonthyear"
                             + this.cal.get(Calendar.DAY_OF_MONTH) + (month < 10 ? ("0" + month) : (month))
                             + this.cal.get(Calendar.YEAR) + "> vitro:mostSpecificType core:DateTimeValue . \n");
-                    sb.append("<" + JenaConnectionFactory.nameSpace + "citation-daymonthyear"
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "daymonthyear"
                             + this.cal.get(Calendar.DAY_OF_MONTH) + (month < 10 ? ("0" + month) : (month))
                             + this.cal.get(Calendar.YEAR)
                             + "> core:dateTimePrecision core:yearMonthDayPrecision . \n");
-                    sb.append("<" + JenaConnectionFactory.nameSpace + "citation-daymonthyear"
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "daymonthyear"
                             + this.cal.get(Calendar.DAY_OF_MONTH) + (month < 10 ? ("0" + month) : (month))
-                            + this.cal.get(Calendar.YEAR) + "> core:dateTime \"" + citationDate
+                            + this.cal.get(Calendar.YEAR) + "> core:dateTime \"" + citeDate
                             + "T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> . \n");
                 }
             }
@@ -211,6 +214,27 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                 sb.append("<" + JenaConnectionFactory.nameSpace + "journal"
                     + journalIdentifier + "> wcmc:ISOAbbreviation \"" + articleFeature.getJournalTitleISOabbreviation().trim()
                         + "\" . \n");
+            
+            //Issn
+            if(articleFeature.getIssn() != null && !articleFeature.getIssn().isEmpty()) {
+                for(MedlineCitationJournalISSN issn: articleFeature.getIssn()) {
+                    if(issn.getIssntype().equalsIgnoreCase("Electronic")) {
+                        sb.append("<" + JenaConnectionFactory.nameSpace + "journal"
+                        + journalIdentifier + "> bibo:eissn \"" + issn.getIssn()
+                        + "\" . \n");
+                    }
+                    if(issn.getIssntype().equalsIgnoreCase("Linking")) {
+                        sb.append("<" + JenaConnectionFactory.nameSpace + "journal"
+                        + journalIdentifier + "> wcmc:lissn \"" + issn.getIssn()
+                        + "\" . \n");
+                    }
+                    if(issn.getIssntype().equalsIgnoreCase("Print")) {
+                        sb.append("<" + JenaConnectionFactory.nameSpace + "journal"
+                        + journalIdentifier + "> bibo:issn \"" + issn.getIssn()
+                        + "\" . \n");
+                    }
+                }
+            }
             sb.append("<" + JenaConnectionFactory.nameSpace + "journal"
                     + journalIdentifier + "> <http://vivoweb.org/ontology/core#publicationVenueFor> " + publicationUrl + " . \n");
 
@@ -342,7 +366,28 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                         if(reCiterArticleAuthorFeature.getLastName() != null)
                             sb.append("<" + JenaConnectionFactory.nameSpace + "hasName-person" + personIdentifier + "> <http://www.w3.org/2006/vcard/ns#familyName> \"" + reCiterArticleAuthorFeature.getLastName().replaceAll("'", "\'") + "\" . \n");
                     }
-                } 
+                }
+                //case when no target author identified
+                if(targetAuthorCount == 0) {
+                    sb.append(publicationUrl + " core:relatedBy <" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + ">. \n");
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> rdf:type obo:BFO_0000001 . \n");
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> rdf:type obo:BFO_0000002 . \n");
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> rdf:type obo:BFO_0000020 . \n");
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> rdf:type core:Relationship . \n");
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> rdf:type core:Authorship . \n");
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> vitro:mostSpecificType core:Authorship . \n");
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> core:relates " + publicationUrl + " . \n");
+                    //sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> core:rank \"" + reCiterArticleAuthorFeature.getRank() + "\"^^xsd:integer . \n");
+                    //Linking vcard of the person
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "cwid-" + uid + "> rdf:type foaf:Person . \n");
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "cwid-" + uid + "> core:relatedBy <" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> . \n");
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> core:relates <" + JenaConnectionFactory.nameSpace + "cwid-" + uid + "> . \n");
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> core:relates <" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> . \n");
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> obo:ARG_2000029 <" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> . \n");
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> core:relatedBy <" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> . \n");
+                    sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> obo:ARG_2000028 <" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> . \n");
+                }
             }
             sb.append(publicationUrl + " <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"ReCiter Connect\" . \n");
             
