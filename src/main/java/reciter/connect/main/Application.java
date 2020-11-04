@@ -129,36 +129,6 @@ public class Application implements ApplicationRunner {
 
         try {
             List<PeopleBean> people = academicFetchFromED.getActivePeopleFromED();
-            /* List<List<PeopleBean>> peopleSubSets = Lists.partition(people, 10);
-            Iterator<List<PeopleBean>> subSetsIteratorPeople = peopleSubSets.iterator();
-            while (subSetsIteratorPeople.hasNext()) {
-                List<PeopleBean> subsetPeoples = subSetsIteratorPeople.next();
-                academicFetchFromED.execute(subsetPeoples);
-            }
-            List<String> peopleCwids = people.stream().map(PeopleBean::getCwid).collect(Collectors.toList());
-            
-            List<List<String>> peopleCwidsSubSets = Lists.partition(peopleCwids, 10);
-            Iterator<List<String>> subSetsIteratorPeopleCwids = peopleCwidsSubSets.iterator();
-		    while (subSetsIteratorPeopleCwids.hasNext()) {
-                List<String> subsetPeoples = subSetsIteratorPeopleCwids.next();
-
-                //appointmentsFetchFromED.execute(subsetPeoples);
-                //grantsFetchFromED.execute(subsetPeoples);
-                try{
-                    StopWatch stopWatch = new StopWatch("Getting Publications from ReCiter");
-                    stopWatch.start("Getting Publications from ReCiter");
-                    log.info("Getting publications for group : " + subsetPeoples.toString());
-                    List<ArticleRetrievalModel> allPubs = reCiterClient
-                                .getPublicationsByGroup(subsetPeoples)
-                                .collectList()
-                                .block();
-                    stopWatch.stop();
-		            log.info("Publications fetch Time taken: " + stopWatch.getTotalTimeSeconds() + "s");
-                    vivoPublicationsService.isPublicationsExist(allPubs);
-                } catch(Exception e) {
-                 log.error("Exception", e); 
-                }
-            } */
             deleteProfile.execute();
             List<List<PeopleBean>> peopleSubSets = Lists.partition(people, 10);
             Iterator<List<PeopleBean>> subSetsIteratorPeople = peopleSubSets.iterator();
@@ -192,8 +162,40 @@ public class Application implements ApplicationRunner {
 		    while (subSetsIteratorPeopleCwids.hasNext()) {
                 List<String> subsetPeoples = subSetsIteratorPeopleCwids.next();
                 List<Callable<String>> callables = new ArrayList<>();
-                callables.add(appointmentsFetchFromED.getCallable(subsetPeoples));
-                callables.add(grantsFetchFromED.getCallable(subsetPeoples));
+                for(String cwid: subsetPeoples) {
+                    callables.add(appointmentsFetchFromED.getCallable(Arrays.asList(cwid)));
+                    callables.add(grantsFetchFromED.getCallable(Arrays.asList(cwid)));
+                }
+                log.info("Appointment and Grants fetch will run for " + subsetPeoples.toString());
+                try {
+                    executor.invokeAll(callables)
+                    .stream()
+                    .map(future -> {
+                        try {
+                            return future.get();
+                        }
+                        catch (Exception e) {
+                            throw new IllegalStateException(e);
+                        }
+                    }).forEach(System.out::println);
+                } catch (InterruptedException e) {
+                    log.error("Unable to invoke callable.", e);
+                }
+                callables.clear();
+            }
+
+            //Close Connections
+            if (ldapConnectionFactory != null)
+            ldapConnectionFactory.destroyConnectionPool();
+
+            if (mysqlConnectionFactory != null)
+                mysqlConnectionFactory.destroyConnectionPool();
+
+            if (mssqlConnectionFactory != null)
+                mssqlConnectionFactory.destroyConnectionPool();
+
+            for(List<String> subsetPeoples: peopleCwidsSubSets) {
+                List<Callable<String>> callables = new ArrayList<>();
                 try{
                     StopWatch stopWatch = new StopWatch("Getting Publications from ReCiter");
                     stopWatch.start("Getting Publications from ReCiter");
@@ -208,7 +210,7 @@ public class Application implements ApplicationRunner {
                 } catch(Exception e) {
                     log.error("Exception", e); 
                 }
-                log.info("Appointment & Grant fetch will run for " + subsetPeoples.toString());
+                log.info("Publications fetch will run for " + subsetPeoples.toString());
                 try {
                     executor.invokeAll(callables)
                     .stream()
@@ -230,16 +232,6 @@ public class Application implements ApplicationRunner {
         } catch (Exception e) {
             log.error("Exception", e);
         }
-        
-         
-        if (ldapConnectionFactory != null)
-            ldapConnectionFactory.destroyConnectionPool();
-
-        if (mysqlConnectionFactory != null)
-            mysqlConnectionFactory.destroyConnectionPool();
-
-        if (mssqlConnectionFactory != null)
-            mssqlConnectionFactory.destroyConnectionPool();
 
         if (jenaConnectionFactory != null)
             jenaConnectionFactory.destroyConnectionPool();
