@@ -909,7 +909,7 @@ public class AcademicFetchFromED {
 			selectQuery.append("where p.cwid is not null \n");
 			selectQuery.append("group by p.cwid");
 
-			log.info(selectQuery.toString());
+			//log.info(selectQuery.toString());
 			PreparedStatement ps = null;
 			java.sql.ResultSet rs = null;
 			try {	

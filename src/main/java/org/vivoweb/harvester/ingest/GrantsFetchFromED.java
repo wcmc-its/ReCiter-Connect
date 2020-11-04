@@ -1604,7 +1604,7 @@ public class GrantsFetchFromED {
 			selectQuery.append("where v.cwid is not null and Confidential <> 'Y' and v.unit_name is not null and v.program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL ");
 			selectQuery.append("and v.cwid= '" + cwid + "' order by v.cwid, v.Account_Number");
 			
-			log.info(selectQuery.toString());
+			//log.info(selectQuery.toString());
 			
 			PreparedStatement ps = null;
 			java.sql.ResultSet rs = null;
@@ -1709,7 +1709,7 @@ public class GrantsFetchFromED {
 			selectQuery.append("where v.cwid is not null and Confidential <> 'Y' and v.unit_name is not null and v.program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL \n");
 			selectQuery.append("and v.Account_Number= '" + accountNumber + "' order by v.cwid, v.Account_Number");
 
-			log.info(selectQuery.toString());
+			//log.info(selectQuery.toString());
 			PreparedStatement ps = null;
 			java.sql.ResultSet rs = null;
 			try {
