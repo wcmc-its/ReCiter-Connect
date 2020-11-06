@@ -1,2 +1,4 @@
 # ReCiter-Connect
+![Build Status](https://codebuild.us-east-1.amazonaws.com/badges?uuid=eyJlbmNyeXB0ZWREYXRhIjoicjIwOU4yYUpwV0xqWC9HM2RxSlBMU3Z1cDJNd2dkVi9KK21wYmRzTVlrejdFSTVCNStjV1BjN3VYL01QNUF0ZTJwWFZCcDQra1Nvd1FpK0ZTYmRNcDZzPSIsIml2UGFyYW1ldGVyU3BlYyI6ImthN0VsdEFkUm5rcVdabDAiLCJtYXRlcmlhbFNldFNlcmlhbCI6MX0%3D&branch=master)
+
 This is for using ReCiter publication data from scholar and consuming to other downstream systems.
