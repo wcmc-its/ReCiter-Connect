@@ -795,15 +795,15 @@ public class DeleteProfile {
 					firstCount = firstCount + 1;
 				}*/
 				StringBuilder sb = new StringBuilder();
-				sb.append("PREFIX vivo: <http://vivoweb.org/ontology/core#> \n"); 
+				sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n"); 
 				sb.append("PREFIX obo: <http://purl.obolibrary.org/obo/> \n");
 				sb.append("PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n");
 				sb.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n"); 
 				sb.append("PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n");
 				sb.append("WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPublications> \n"); 
 				sb.append("DELETE { \n");
-				sb.append("<" + pub.getAuthorshipUrl().trim() + "> vivo:relates ?person . \n");
-				sb.append("?person vivo:relatedBy <" + pub.getAuthorshipUrl().trim() + "> . \n");
+				sb.append("<" + pub.getAuthorshipUrl().trim() + "> core:relates ?person . \n");
+				sb.append("?person core:relatedBy <" + pub.getAuthorshipUrl().trim() + "> . \n");
 				sb.append("} \n");
 				sb.append("INSERT { \n");
 				sb.append("<" + pub.getAuthorshipUrl().trim() + "> core:relates <" + JenaConnectionFactory.nameSpace + "person" + randomNumber +"> .\n");
@@ -831,8 +831,8 @@ public class DeleteProfile {
 					sb.append("<" + JenaConnectionFactory.nameSpace + "hasName-person" + randomNumber + "> <http://www.w3.org/2006/vcard/ns#familyName> \"" + this.familyName.replaceAll("'", "\'") + "\" . \n");
 				sb.append("}\n");
 				sb.append("WHERE { \n");
-				sb.append("OPTIONAL { <" + pub.getAuthorshipUrl().trim() + "> vivo:relates ?person .\n");
-				sb.append("?person vivo:relatedBy <" + pub.getAuthorshipUrl().trim() + "> .\n");
+				sb.append("OPTIONAL { <" + pub.getAuthorshipUrl().trim() + "> core:relates ?person .\n");
+				sb.append("?person core:relatedBy <" + pub.getAuthorshipUrl().trim() + "> .\n");
 				sb.append("FILTER(REGEX(STR(?person),\"cwid\",\"i\") || REGEX(STR(?person),\"person\",\"i\")) }\n");
 				sb.append("}");
 				
