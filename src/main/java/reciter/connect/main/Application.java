@@ -38,6 +38,7 @@ import org.vivoweb.harvester.ingest.AppointmentsFetchFromED;
 import org.vivoweb.harvester.ingest.EdDataInterface;
 import org.vivoweb.harvester.ingest.GrantsFetchFromED;
 import org.vivoweb.harvester.operations.DeleteProfile;
+import org.vivoweb.harvester.operations.Kb2SyncUtils;
 
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -123,6 +124,7 @@ public class Application implements ApplicationRunner {
         AppointmentsFetchFromED appointmentsFetchFromED = context.getBean(AppointmentsFetchFromED.class);
         ReCiterClient reCiterClient = context.getBean(ReCiterClient.class);
         DeleteProfile deleteProfile = context.getBean(DeleteProfile.class);
+        Kb2SyncUtils kb2SyncUtils = context.getBean(Kb2SyncUtils.class);
         academicFetchFromED.getCOIData();
 
         ExecutorService executor = Executors.newFixedThreadPool(25);
@@ -156,6 +158,7 @@ public class Application implements ApplicationRunner {
                 callables.clear();
             }*/
             List<String> peopleCwids = people.stream().map(PeopleBean::getCwid).collect(Collectors.toList());
+            kb2SyncUtils.syncOverview(peopleCwids);
             
             List<List<String>> peopleCwidsSubSets = Lists.partition(peopleCwids, 5);
             /*Iterator<List<String>> subSetsIteratorPeopleCwids = peopleCwidsSubSets.iterator();
@@ -194,7 +197,7 @@ public class Application implements ApplicationRunner {
             if (mssqlConnectionFactory != null)
                 mssqlConnectionFactory.destroyConnectionPool();
 
-            for(List<String> subsetPeoples: peopleCwidsSubSets) {
+            /*for(List<String> subsetPeoples: peopleCwidsSubSets) {
                 List<Callable<String>> callables = new ArrayList<>();
                 try{
                     StopWatch stopWatch = new StopWatch("Getting Publications from ReCiter");
@@ -226,7 +229,7 @@ public class Application implements ApplicationRunner {
                     log.error("Unable to invoke callable.", e);
                 }
                 callables.clear();
-            } 
+            }*/
             
 
         } catch (Exception e) {
