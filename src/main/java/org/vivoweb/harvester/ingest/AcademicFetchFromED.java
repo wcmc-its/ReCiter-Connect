@@ -895,21 +895,19 @@ public class AcademicFetchFromED {
 			String coi = null;
 			
 			StringBuilder selectQuery = new StringBuilder();
-			
-			//selectQuery.append(" set session group_concat_max_len = 90000");
 			selectQuery.append("select p.cwid, \n");
-			selectQuery.append("concat(conflictsDescription,group_concat(distinct activityGroupData separator ''),\"</div>\" ) as conflicts \n");
-			selectQuery.append("from (select cwid, \n");
-			selectQuery.append("concat(\"<div id='conflict'><span class='activity-group-label'>\",vivo_pops_activity_group,\": </span>\",\"<span class='activity-group-data'>\",replace(replace(group_concat(distinct entity order by entity separator '; '),\"(*)\",\"\"),\" ;\",\";\"),\"</span></div>\") as activityGroupData \n");
+			selectQuery.append("case when conflicts is not null then conflicts else \"<div id='conflict-container'><p>No External Relationships Currently Reported</p></div>\" end as conflicts \n");
+			selectQuery.append("from v_coi_vivo_activity_group m \n");
+			selectQuery.append("join  ( \n");
+			selectQuery.append("select z.cwid, concat(\"<div id='conflict-container'>\",group_concat(distinct activityGroupData separator ''),\"</div>\") as conflicts \n");
+			selectQuery.append("from (select cwid, concat(\"<div class='conflict'><span class='activity-group-label'>\",vivo_pops_activity_group,\": </span>\",\"<span class='activity-group-data'>\",replace(replace(group_concat(distinct entity order by entity separator '; '),\"(*)\",\"\"),\" ;\",\";\"),\"</span></div>\") as activityGroupData \n");
 			selectQuery.append("from v_coi_vivo_activity_group \n");
-			selectQuery.append("group by cwid, vivo_pops_activity_group) z\n");
-			selectQuery.append("join (select cwid, concat(\"<div id='conflicts-description'>Relationships reported by Dr. \",last_name,\" as of \",\n");
-			selectQuery.append("Date_Format(now(),'%M %d, %Y'), \".</div><div id='conflicts'>\") as conflictsDescription \n");
-			selectQuery.append("from v_coi_vivo_activity_group) p on p.cwid = z.cwid \n");
-			selectQuery.append("where p.cwid is not null \n");
-			selectQuery.append("group by p.cwid");
+			selectQuery.append("where vivo_pops_activity_group is not null \n");
+			selectQuery.append("group by cwid, vivo_pops_activity_group) z \n");
+			selectQuery.append("where z.cwid is not null \n");
+			selectQuery.append("group by z.cwid) p on p.cwid = m.cwid");
 
-			//log.info(selectQuery.toString());
+			log.info(selectQuery.toString());
 			PreparedStatement ps = null;
 			java.sql.ResultSet rs = null;
 			try {	
