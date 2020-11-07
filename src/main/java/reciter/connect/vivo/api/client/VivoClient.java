@@ -26,7 +26,7 @@ public class VivoClient {
 
     private static final String vivoApiUsername = System.getenv("VIVO_API_USERNAME").trim();
     private static final String vivoApiPassword = System.getenv("VIVO_API_PASSWORD").trim();
-    private final String vivoBaseUrl = System.getenv("VIVO_BASE_URL");
+    private static final String vivoBaseUrl = System.getenv("VIVO_BASE_URL");
 
     public VivoClient(WebClient.Builder webClientBuilder) {
         try {
@@ -36,7 +36,7 @@ public class VivoClient {
             this.webClient = webClientBuilder
                     .clientConnector(new ReactorClientHttpConnector(httpClient))
                     .filter(VivoClient.errorHandlingFilter())
-                    .baseUrl(this.vivoBaseUrl)
+                    .baseUrl(VivoClient.vivoBaseUrl)
                     .build();
         } catch (SSLException e) {
             log.error("SSLException", e);
@@ -81,8 +81,8 @@ public class VivoClient {
     public String vivoQueryApi(String query) {
 
         LinkedMultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("email", vivoApiUsername);
-        body.add("password", vivoApiPassword);
+        body.add("email", VivoClient.vivoApiUsername);
+        body.add("password", VivoClient.vivoApiPassword);
         body.add("query", query);
         
          return this.webClient.post()
