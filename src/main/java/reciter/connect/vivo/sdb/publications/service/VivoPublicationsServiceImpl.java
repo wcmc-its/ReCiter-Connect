@@ -390,27 +390,19 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                 }
             }
             sb.append(publicationUrl + " <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"ReCiter Connect\" . \n");
-            sb.append("}}");
-            //log.info(sb.toString());
-            if(ingestType.equals(IngestType.VIVO_API.toString())) {
-                try {
-                    String response = this.vivoClient.vivoUpdateApi(sb.toString());
-                    log.info(response);
-                } catch(Exception e) {
-                    log.error("VIVO Update API exception", e);
-                }
-                
-            } else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
-                try {
-                    vivoJena.executeUpdateQuery(sb.toString(), true);
-                } catch(IOException e) {
-                    log.error("Error connecting to SDBJena");
-                }
-                catch(QueryParseException qpe) {
-                    log.error("QueryParseException", qpe);
-                    log.error("ERROR: The pub is for " + uid);
-                }
-            }
+            
+        }
+        sb.append("}}");
+        //log.info(sb.toString());
+        
+        try {
+            vivoJena.executeUpdateQuery(sb.toString(), true);
+        } catch(IOException e) {
+            log.error("Error connecting to SDBJena");
+        }
+        catch(QueryParseException qpe) {
+            log.error("QueryParseException", qpe);
+            log.error("ERROR: The pub is for " + uid);
         }
         
         stopWatch.stop();
