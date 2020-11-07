@@ -118,13 +118,13 @@ public class Application implements ApplicationRunner {
         AppointmentsFetchFromED appointmentsFetchFromED = context.getBean(AppointmentsFetchFromED.class);
         ReCiterClient reCiterClient = context.getBean(ReCiterClient.class);
         DeleteProfile deleteProfile = context.getBean(DeleteProfile.class);
-        academicFetchFromED.getCOIData();
+        //academicFetchFromED.getCOIData();
 
         ExecutorService executor = Executors.newFixedThreadPool(25);
 
         try {
             List<PeopleBean> people = academicFetchFromED.getActivePeopleFromED();
-            deleteProfile.execute();
+            /*deleteProfile.execute();
             List<List<PeopleBean>> peopleSubSets = Lists.partition(people, 10);
             Iterator<List<PeopleBean>> subSetsIteratorPeople = peopleSubSets.iterator();
             while (subSetsIteratorPeople.hasNext()) {
@@ -149,11 +149,11 @@ public class Application implements ApplicationRunner {
                     log.error("Unable to invoke callable.", e);
                 }
                 callables.clear();
-            }
+            }*/
             List<String> peopleCwids = people.stream().map(PeopleBean::getCwid).collect(Collectors.toList());
             
             List<List<String>> peopleCwidsSubSets = Lists.partition(peopleCwids, 5);
-            Iterator<List<String>> subSetsIteratorPeopleCwids = peopleCwidsSubSets.iterator();
+            /*Iterator<List<String>> subSetsIteratorPeopleCwids = peopleCwidsSubSets.iterator();
 		    while (subSetsIteratorPeopleCwids.hasNext()) {
                 List<String> subsetPeoples = subSetsIteratorPeopleCwids.next();
                 List<Callable<String>> callables = new ArrayList<>();
@@ -177,7 +177,7 @@ public class Application implements ApplicationRunner {
                     log.error("Unable to invoke callable.", e);
                 }
                 callables.clear();
-            }
+            }*/
 
             //Close Connections
             if (ldapConnectionFactory != null)
