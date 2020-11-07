@@ -489,20 +489,17 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                                 sb.append("<" + JenaConnectionFactory.nameSpace + "citation-pubid" + pmid + "> rdfs:label ?count . \n");
                                 sb.append("}");
                                 log.info("Citation Count was updated for publication - " + pmid + " from " + qs.get("citationCount").toString() + " to " + reciterPub.getTimesCited());
-                                if(ingestType.equals(IngestType.VIVO_API.toString())) {
-                                    String response = this.vivoClient.vivoUpdateApi(sb.toString());
-                                    log.info(response + " Citation Count was updated for publication - " + pmid + " from " + qs.get("citationCount").toString() + " to " + reciterPub.getTimesCited());
-                                } else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
-                                    try {
-                                        vivoJena.executeUpdateQuery(sb.toString(), true);
-                                    } catch(IOException e) {
-                                        log.error("Error connecting to SDBJena");
-                                    }
-                                    catch(QueryParseException qpe) {
-                                        log.error("QueryParseException", qpe);
-                                        log.error("ERROR: The pub is " + pmid);
-                                    }
+                                
+                                try {
+                                    vivoJena.executeUpdateQuery(sb.toString(), true);
+                                } catch(IOException e) {
+                                    log.error("Error connecting to SDBJena");
                                 }
+                                catch(QueryParseException qpe) {
+                                    log.error("QueryParseException", qpe);
+                                    log.error("ERROR: The pub is " + pmid);
+                                }
+                                
                             } else {
                                 log.info("Times Cited is in sync for publication - " + pmid);
                             }
