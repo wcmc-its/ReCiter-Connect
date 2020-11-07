@@ -393,8 +393,13 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
             sb.append("}}");
             //log.info(sb.toString());
             if(ingestType.equals(IngestType.VIVO_API.toString())) {
-                String response = this.vivoClient.vivoUpdateApi(sb.toString());
-                log.info(response);
+                try {
+                    String response = this.vivoClient.vivoUpdateApi(sb.toString());
+                    log.info(response);
+                } catch(Exception e) {
+                    log.error("VIVO Update API exception", e);
+                }
+                
             } else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
                 try {
                     vivoJena.executeUpdateQuery(sb.toString(), true);
