@@ -24,8 +24,8 @@ public class VivoClient {
 
     private WebClient webClient;
 
-    private final String vivoApiUsername = System.getenv("VIVO_API_USERNAME");
-    private final String vivoApiPassword = System.getenv("VIVO_API_PASSWORD");
+    private static final String vivoApiUsername = System.getenv("VIVO_API_USERNAME").trim();
+    private static final String vivoApiPassword = System.getenv("VIVO_API_PASSWORD").trim();
     private final String vivoBaseUrl = System.getenv("VIVO_BASE_URL");
 
     public VivoClient(WebClient.Builder webClientBuilder) {
@@ -44,10 +44,12 @@ public class VivoClient {
     }
 
     public String vivoUpdateApi(String updateQuery) {
+        log.info("VIVO Email: " + VivoClient.vivoApiUsername);
+        log.info("VIVO Password: " + VivoClient.vivoApiPassword);
 
         LinkedMultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("email", this.vivoApiUsername);
-        body.add("password", this.vivoApiPassword);
+        body.add("email", VivoClient.vivoApiUsername);
+        body.add("password", VivoClient.vivoApiPassword);
         body.add("update", updateQuery);
         
          return this.webClient.post()
