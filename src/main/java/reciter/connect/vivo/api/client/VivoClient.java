@@ -44,9 +44,6 @@ public class VivoClient {
     }
 
     public String vivoUpdateApi(String updateQuery) {
-        log.info("VIVO Email: " + VivoClient.vivoApiUsername);
-        log.info("VIVO Password: " + VivoClient.vivoApiPassword);
-
         LinkedMultiValueMap<String, String> body = new LinkedMultiValueMap<>();
         body.add("email", VivoClient.vivoApiUsername);
         body.add("password", VivoClient.vivoApiPassword);

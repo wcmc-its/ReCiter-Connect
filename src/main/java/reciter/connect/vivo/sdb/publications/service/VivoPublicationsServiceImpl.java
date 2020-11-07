@@ -390,24 +390,24 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                 }
             }
             sb.append(publicationUrl + " <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"ReCiter Connect\" . \n");
-            
-        }
-        sb.append("}}");
-        //log.info(sb.toString());
-        if(ingestType.equals(IngestType.VIVO_API.toString())) {
-            String response = this.vivoClient.vivoUpdateApi(sb.toString());
-            log.info(response);
-        } else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
-            try {
-                vivoJena.executeUpdateQuery(sb.toString(), true);
-            } catch(IOException e) {
-                log.error("Error connecting to SDBJena");
+            sb.append("}}");
+            //log.info(sb.toString());
+            if(ingestType.equals(IngestType.VIVO_API.toString())) {
+                String response = this.vivoClient.vivoUpdateApi(sb.toString());
+                log.info(response);
+            } else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+                try {
+                    vivoJena.executeUpdateQuery(sb.toString(), true);
+                } catch(IOException e) {
+                    log.error("Error connecting to SDBJena");
+                }
+                catch(QueryParseException qpe) {
+                    log.error("QueryParseException", qpe);
+                    log.error("ERROR: The pub is for " + uid);
+                }
             }
-            catch(QueryParseException qpe) {
-                log.error("QueryParseException", qpe);
-                log.error("ERROR: The pub is for " + uid);
-            }
         }
+        
         stopWatch.stop();
         log.info("Publication import for " + uid + " took " + stopWatch.getTotalTimeSeconds()+"s");
         /* try{
