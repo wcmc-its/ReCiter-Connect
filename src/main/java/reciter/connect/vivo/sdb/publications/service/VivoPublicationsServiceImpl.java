@@ -119,9 +119,13 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                 sb.append("<" + JenaConnectionFactory.nameSpace + "citation-pubid" + articleFeature.getPmid()
                         + "> rdf:type <http://purl.org/spar/c4o/GlobalCitationCount> . \n");
                 sb.append("<" + JenaConnectionFactory.nameSpace + "citation-pubid" + articleFeature.getPmid()
+                + "> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "citation-pubid" + articleFeature.getPmid()
+                + "> vitro:mostSpecificType <http://purl.org/spar/c4o/GlobalCitationCount> . \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "citation-pubid" + articleFeature.getPmid()
                         + "> rdfs:label \"" + articleFeature.getTimesCited() + "\" . \n");
                 // Citation date
-                if (citationDate != null) {
+                /*if (citationDate != null) {
                     this.cal.setTime(citationDate);
                     int month = this.cal.get(Calendar.MONTH) + 1; // Since calender month start with 0
                     sb.append("<" + JenaConnectionFactory.nameSpace + "citation-pubid" + articleFeature.getPmid()
@@ -142,7 +146,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                             + this.cal.get(Calendar.DAY_OF_MONTH) + (month < 10 ? ("0" + month) : (month))
                             + this.cal.get(Calendar.YEAR) + "> core:dateTime \"" + citeDate
                             + "T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> . \n");
-                }
+                }*/
             }
             // MeshMajor 
             if(articleFeature.getArticleKeywords() != null && !articleFeature.getArticleKeywords().isEmpty()) {
@@ -475,6 +479,27 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                             }
                         }
                         if(qs.get("citationCount") != null) {
+                            //Remove citation date
+                            sb.setLength(0);
+                            sb.append(QueryConstants.getSparqlPrefixQuery());
+                            sb.append("WITH <" + VivoGraphs.PUBLICATIONS_GRAPH + "> \n");
+                            sb.append("DELETE { \n");
+                            sb.append("<" + JenaConnectionFactory.nameSpace + "citation-pubid" + pmid + "> core:dateTimeValue ?citationDate . \n");
+                            sb.append("} \n");
+                            sb.append("WHERE { \n");
+                            sb.append("<" + JenaConnectionFactory.nameSpace + "citation-pubid" + pmid + "> core:dateTimeValue ?citationDate . \n");
+                            sb.append("}");
+                            log.info("Citation Date was removed for publication - " + pmid);
+                            
+                            try {
+                                vivoJena.executeUpdateQuery(sb.toString(), true);
+                            } catch(IOException e) {
+                                log.error("Error connecting to SDBJena");
+                            }
+                            catch(QueryParseException qpe) {
+                                log.error("QueryParseException", qpe);
+                                log.error("ERROR: The pub is " + pmid);
+                            }
                             if(reciterPub.getTimesCited() != Long.parseLong(qs.get("citationCount").toString())) {
                                 sb.setLength(0);
                                 sb.append(QueryConstants.getSparqlPrefixQuery());
