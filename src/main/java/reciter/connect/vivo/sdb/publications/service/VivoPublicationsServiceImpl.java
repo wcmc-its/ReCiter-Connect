@@ -316,7 +316,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                         targetAuthorCount++;
                     
                     if(reCiterArticleAuthorFeature.isTargetAuthor() && targetAuthorCount == 1) {
-                        sb.append(publicationUrl + " core:relatedBy <" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + reCiterArticleAuthorFeature.getRank() + ">. \n");
+                        sb.append(publicationUrl + " core:relatedBy <" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + reCiterArticleAuthorFeature.getRank() + "> . \n");
                         sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + reCiterArticleAuthorFeature.getRank() + "> rdf:type obo:BFO_0000001 . \n");
                         sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + reCiterArticleAuthorFeature.getRank() + "> rdf:type obo:BFO_0000002 . \n");
                         sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + reCiterArticleAuthorFeature.getRank() + "> rdf:type obo:BFO_0000020 . \n");
@@ -373,7 +373,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                 }
                 //case when no target author identified
                 if(targetAuthorCount == 0) {
-                    sb.append(publicationUrl + " core:relatedBy <" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + ">. \n");
+                    sb.append(publicationUrl + " core:relatedBy <" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> . \n");
                     sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> rdf:type obo:BFO_0000001 . \n");
                     sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> rdf:type obo:BFO_0000002 . \n");
                     sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> rdf:type obo:BFO_0000020 . \n");
@@ -398,27 +398,27 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
         }
         sb.append("}}");
         //log.info(sb.toString());
-        
-        try {
-            vivoJena.executeUpdateQuery(sb.toString(), true);
-        } catch(IOException e) {
-            log.error("Error connecting to SDBJena");
-        }
-        catch(QueryParseException qpe) {
-            log.error("QueryParseException", qpe);
-            log.error("ERROR: The pub is for " + uid);
+        if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+            try {
+                vivoJena.executeUpdateQuery(sb.toString(), true);
+            } catch(IOException e) {
+                log.error("Error connecting to SDBJena");
+            }
+            catch(QueryParseException qpe) {
+                log.error("QueryParseException", qpe);
+                log.error("ERROR: The pub is for " + uid);
+            }
+        } else {
+            try{
+                String response = this.vivoClient.vivoUpdateApi(sb.toString());
+                log.info(response);
+            } catch(Exception  e) {
+                log.info("Api Exception", e);
+            }
         }
         
         stopWatch.stop();
         log.info("Publication import for " + uid + " took " + stopWatch.getTotalTimeSeconds()+"s");
-        /* try{
-            String response = this.vivoClient.vivoUpdateApi(sb.toString());
-            log.info(response);
-        } catch(Exception  e) {
-            log.info("Api Exception", e);
-        }
-		stopWatch.stop();
-		log.info("Publications import Time taken: " + stopWatch.getTotalTimeSeconds() + "s"); */
 
     }
 
