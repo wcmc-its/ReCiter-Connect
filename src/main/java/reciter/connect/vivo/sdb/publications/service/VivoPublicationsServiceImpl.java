@@ -392,6 +392,28 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                     sb.append("<" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> core:relatedBy <" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> . \n");
                     sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> obo:ARG_2000028 <" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> . \n");
                 }
+            } else {
+                log.info("Publication " + articleFeature.getPmid() + " has not author record. Thus assigning to the uid.");
+                //case when there is no author record
+                sb.append(publicationUrl + " core:relatedBy <" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> . \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> rdf:type obo:BFO_0000001 . \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> rdf:type obo:BFO_0000002 . \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> rdf:type obo:BFO_0000020 . \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> rdf:type core:Relationship . \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> rdf:type core:Authorship . \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> vitro:mostSpecificType core:Authorship . \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> core:relates " + publicationUrl + " . \n");
+                //sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> core:rank \"" + reCiterArticleAuthorFeature.getRank() + "\"^^xsd:integer . \n");
+                //Linking vcard of the person
+                sb.append("<" + JenaConnectionFactory.nameSpace + "cwid-" + uid + "> rdf:type foaf:Person . \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "cwid-" + uid + "> core:relatedBy <" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> . \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> core:relates <" + JenaConnectionFactory.nameSpace + "cwid-" + uid + "> . \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> core:relates <" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> . \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> obo:ARG_2000029 <" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> . \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> core:relatedBy <" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> . \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> obo:ARG_2000028 <" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> . \n");
+
             }
             sb.append(publicationUrl + " <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"ReCiter Connect\" . \n");
             
@@ -864,6 +886,37 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                         }
                     }
                 }
+        } else {
+            log.info("Publication " + article.getPmid() + " has not author record. Thus assigning to the uid.");
+            StringBuilder sb = new StringBuilder();
+            sb.append(QueryConstants.getSparqlPrefixQuery());
+            sb.append("INSERT DATA { \n");
+            sb.append("GRAPH <" + VivoGraphs.PUBLICATIONS_GRAPH + "> {\n");
+            //case when there is no author record
+            sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + article.getPmid() + "> core:relatedBy <" + JenaConnectionFactory.nameSpace + "pubid" + article.getPmid() + "authorship" + article.getPmid() + "> . \n");
+            sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + article.getPmid() + "authorship" + article.getPmid() + "> rdf:type obo:BFO_0000001 . \n");
+            sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + article.getPmid() + "authorship" + article.getPmid() + "> rdf:type obo:BFO_0000002 . \n");
+            sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + article.getPmid() + "authorship" + article.getPmid() + "> rdf:type obo:BFO_0000020 . \n");
+            sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + article.getPmid() + "authorship" + article.getPmid() + "> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+            sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + article.getPmid() + "authorship" + article.getPmid() + "> rdf:type core:Relationship . \n");
+            sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + article.getPmid() + "authorship" + article.getPmid() + "> rdf:type core:Authorship . \n");
+            sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + article.getPmid() + "authorship" + article.getPmid() + "> vitro:mostSpecificType core:Authorship . \n");
+            sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + article.getPmid() + "authorship" + article.getPmid() + "> core:relates <" + JenaConnectionFactory.nameSpace + "pubid" + article.getPmid() + "> . \n");
+            //sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + articleFeature.getPmid() + "authorship" + articleFeature.getPmid() + "> core:rank \"" + reCiterArticleAuthorFeature.getRank() + "\"^^xsd:integer . \n");
+            //Linking vcard of the person
+            sb.append("<" + JenaConnectionFactory.nameSpace + "cwid-" + uid + "> rdf:type foaf:Person . \n");
+            sb.append("<" + JenaConnectionFactory.nameSpace + "cwid-" + uid + "> core:relatedBy <" + JenaConnectionFactory.nameSpace + "pubid" + article.getPmid() + "authorship" + article.getPmid() + "> . \n");
+            sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + article.getPmid() + "authorship" + article.getPmid() + "> core:relates <" + JenaConnectionFactory.nameSpace + "cwid-" + uid + "> . \n");
+            sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + article.getPmid() + "authorship" + article.getPmid() + "> core:relates <" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> . \n");
+            sb.append("<" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> obo:ARG_2000029 <" + JenaConnectionFactory.nameSpace + "pubid" + article.getPmid() + "authorship" + article.getPmid() + "> . \n");
+            sb.append("<" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> core:relatedBy <" + JenaConnectionFactory.nameSpace + "pubid" + article.getPmid() + "authorship" + article.getPmid() + "> . \n");
+            sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + article.getPmid() + "authorship" + article.getPmid() + "> obo:ARG_2000028 <" + JenaConnectionFactory.nameSpace + "arg2000028-" + uid + "> . \n");
+            sb.append("}}");
+            try {
+                vivoJena.executeUpdateQuery(sb.toString(), true);
+            } catch(IOException e) {
+                log.error("Error connecting to SDBJena");
+            }
         }
     }
 
