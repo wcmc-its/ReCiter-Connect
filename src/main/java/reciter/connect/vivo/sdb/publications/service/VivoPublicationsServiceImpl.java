@@ -480,7 +480,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                         }
                         if(qs.get("citationCount") != null) {
                             //Remove citation date
-                            sb.setLength(0);
+                            /*sb.setLength(0);
                             sb.append(QueryConstants.getSparqlPrefixQuery());
                             sb.append("WITH <" + VivoGraphs.PUBLICATIONS_GRAPH + "> \n");
                             sb.append("DELETE { \n");
@@ -499,7 +499,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                             catch(QueryParseException qpe) {
                                 log.error("QueryParseException", qpe);
                                 log.error("ERROR: The pub is " + pmid);
-                            }
+                            }*/
                             if(reciterPub.getTimesCited() != Long.parseLong(qs.get("citationCount").toString())) {
                                 sb.setLength(0);
                                 sb.append(QueryConstants.getSparqlPrefixQuery());
