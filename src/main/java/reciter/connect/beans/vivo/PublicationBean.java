@@ -1,16 +1,20 @@
 package reciter.connect.beans.vivo;
 
-import java.io.InputStream;
 import java.util.Set;
+
 import org.apache.commons.lang.StringUtils;
-import org.openjena.atlas.logging.Log;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 
 /**
  * @author szd2013
  * <p> This is the publication bean class containing all the information pertaining to publication <p>
  */
+@AllArgsConstructor
+@NoArgsConstructor
 public class PublicationBean {
 	
 	private int publicationId;
@@ -19,7 +23,9 @@ public class PublicationBean {
 	private String pmcid;
 	private String doi;
 	private String journal;
+	private String journalHash;
 	private String coverDate;
+	private String datePrecision;
 	private String pages;
 	private String volume;
 	private String issue;
@@ -215,4 +221,33 @@ public class PublicationBean {
 	}
 	
 	
+
+    /**
+     * @return String return the journalHash
+     */
+    public String getJournalHash() {
+        return journalHash;
+    }
+
+    /**
+     * @param journalHash the journalHash to set
+     */
+    public void setJournalHash(String journalHash) {
+        this.journalHash = journalHash;
+    }
+
+    /**
+     * @return String return the datePrecision
+     */
+    public String getDatePrecision() {
+        return datePrecision;
+    }
+
+    /**
+     * @param datePrecision the datePrecision to set
+     */
+    public void setDatePrecision(String datePrecision) {
+        this.datePrecision = datePrecision;
+    }
+
 }
