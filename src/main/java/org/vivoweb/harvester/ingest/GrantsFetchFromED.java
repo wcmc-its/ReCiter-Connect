@@ -233,23 +233,25 @@ public class GrantsFetchFromED {
 			if(newContributors.isEmpty())
 				log.info("No new contributors for grant-" + gb.getAwardNumber().trim());
 			
-			//Checking for new Date Time Interval
-			
-			String[] dates = dateTimeInterval.split("to");
-			if(dates[1].trim().equals(gb.getEndDate().trim()) && dateTimeInterval != null) 
-				log.info("Grant Date Interval has not changed");
-			else
-				dateTimeIntervalFlag = true;
-			
-			beginDate = dates[0].trim();
-			endDate = dates[1].trim();
-			try {
-				if(!beginDate.equals(""))
-					beginDate = shortFormat.format(mediumFormat.parse(beginDate));
-				if(!endDate.equals(""))
-					endDate = shortFormat.format(mediumFormat.parse(endDate));
-			} catch(ParseException e) {
-				log.error("ParseException", e);
+			String[] dates = new String[2];
+				//Checking for new Date Time Interval
+			if(dateTimeInterval != null && dateTimeInterval.contains("to")) {
+				 dates = dateTimeInterval.split("to");
+				if(dates[1].trim().equals(gb.getEndDate().trim())) 
+					log.info("Grant Date Interval has not changed");
+				else
+					dateTimeIntervalFlag = true;
+				
+				beginDate = dates[0].trim();
+				endDate = dates[1].trim();
+				try {
+					if(!beginDate.equals(""))
+						beginDate = shortFormat.format(mediumFormat.parse(beginDate));
+					if(!endDate.equals(""))
+						endDate = shortFormat.format(mediumFormat.parse(endDate));
+				} catch(ParseException e) {
+					log.error("ParseException", e);
+				}
 			}
 			
 			
