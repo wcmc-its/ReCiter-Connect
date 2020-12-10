@@ -19,13 +19,14 @@
 package reciter.connect.database.ldap;
 
 import java.security.GeneralSecurityException;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Vector;
 
 import javax.inject.Inject;
 
+import com.unboundid.asn1.ASN1OctetString;
 import com.unboundid.ldap.sdk.LDAPConnection;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.LDAPSearchException;
@@ -33,6 +34,7 @@ import com.unboundid.ldap.sdk.SearchRequest;
 import com.unboundid.ldap.sdk.SearchResult;
 import com.unboundid.ldap.sdk.SearchResultEntry;
 import com.unboundid.ldap.sdk.SearchScope;
+import com.unboundid.ldap.sdk.controls.SimplePagedResultsControl;
 import com.unboundid.util.ssl.SSLUtil;
 import com.unboundid.util.ssl.TrustAllTrustManager;
 
@@ -212,14 +214,35 @@ public class LDAPConnectionFactory {
 	 */
 	public List<SearchResultEntry> search(final String filter, final String base, SearchScope scope, String... attributes) {
 		LDAPConnection connection = null;
+		List<SearchResultEntry> entries = new ArrayList<>();
 		try {
 			SearchRequest searchRequest = new SearchRequest(base, scope, filter, attributes);
+			ASN1OctetString resumeCookie = null;
+			// Perform a search to retrieve all users in the server, but only retrieving
+			// ten at a time.
+			int numSearches = 0;
+			int totalEntriesReturned = 0;
 			//connection = LDAPConnectionFactory.getConnection(propertyFilePath);
 			connection = getConnectionfromPool();
 			if(connection != null) {
-				SearchResult results = connection.search(searchRequest);
-				List<SearchResultEntry> entries = results.getSearchEntries();
-				return entries;
+				while(true) {
+					searchRequest.setControls(new SimplePagedResultsControl(500, resumeCookie));
+					SearchResult results = connection.search(searchRequest);
+					numSearches++;
+   					totalEntriesReturned += results.getEntryCount();
+					entries.addAll(results.getSearchEntries());
+					SimplePagedResultsControl responseControl =SimplePagedResultsControl.get(results);
+					if (responseControl.moreResultsToReturn())
+					{
+						// The resume cookie can be included in the simple paged results
+						// control included in the next search to get the next page of results.
+						resumeCookie = responseControl.getCookie();
+					}
+					else
+					{
+						break;
+					}
+				}
 			}
 		} catch (LDAPSearchException e) {
 			slf4jLogger.error("LDAPSearchException", e);
@@ -230,6 +253,6 @@ public class LDAPConnectionFactory {
 				returnConnectionToPool(connection);
 			}
 		}
-		return Collections.emptyList();
+		return entries;
 	}
 }
