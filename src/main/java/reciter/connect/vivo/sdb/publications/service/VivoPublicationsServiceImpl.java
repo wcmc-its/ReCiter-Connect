@@ -420,7 +420,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
         sb.append("}}");
         //log.info(sb.toString());
 
-        //if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+        if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
             try {
                 vivoJena.executeUpdateQuery(sb.toString(), true);
             } catch(IOException e) {
@@ -430,14 +430,14 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                 log.error("QueryParseException", qpe);
                 log.error("ERROR: The pub is for " + uid);
             }
-        /*} else {
+        } else {
             try{
                 String response = this.vivoClient.vivoUpdateApi(sb.toString());
                 log.info(response);
             } catch(Exception  e) {
                 log.info("Api Exception", e);
             }
-        }*/
+        }
         stopWatch.stop();
         log.info("Publication import for " + uid + " took " + stopWatch.getTotalTimeSeconds()+"s");
 
@@ -521,7 +521,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                                 log.error("QueryParseException", qpe);
                                 log.error("ERROR: The pub is " + pmid);
                             }*/
-                            if(reciterPub.getTimesCited() != Long.parseLong(qs.get("citationCount").toString())) {
+                            if(reciterPub.getTimesCited() != null && reciterPub.getTimesCited() != Long.parseLong(qs.get("citationCount").toString())) {
                                 sb.setLength(0);
                                 sb.append(QueryConstants.getSparqlPrefixQuery());
                                 sb.append("WITH <" + VivoGraphs.PUBLICATIONS_GRAPH + "> \n");
@@ -551,7 +551,8 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                             }
                         }
                         if(qs.get("pubType") != null) {
-                            if(!reciterPub.getPublicationType().getPublicationTypeCanonical().contains(qs.get("pubType").toString().replace("http://purl.org/ontology/bibo/", "")
+                            if(reciterPub.getPublicationType() != null && 
+                                reciterPub.getPublicationType().getPublicationTypeCanonical() != null && !reciterPub.getPublicationType().getPublicationTypeCanonical().contains(qs.get("pubType").toString().replace("http://purl.org/ontology/bibo/", "")
                             .replace("http://vivoweb.org/ontology/core#", "").replace("http://purl.org/spar/fabio", "").replace("http://weill.cornell.edu/vivo/ontology/wcmc#", "").substring(0,6))) {
                                 sb.setLength(0);
                                 sb.append(QueryConstants.getSparqlPrefixQuery());
