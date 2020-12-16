@@ -420,7 +420,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
         sb.append("}}");
         //log.info(sb.toString());
 
-        //if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+        if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
             try {
                 vivoJena.executeUpdateQuery(sb.toString(), true);
             } catch(IOException e) {
@@ -430,14 +430,14 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                 log.error("QueryParseException", qpe);
                 log.error("ERROR: The pub is for " + uid);
             }
-        /*} else {
+        } else {
             try{
                 String response = this.vivoClient.vivoUpdateApi(sb.toString());
                 log.info(response);
             } catch(Exception  e) {
                 log.info("Api Exception", e);
             }
-        }*/
+        }
         stopWatch.stop();
         log.info("Publication import for " + uid + " took " + stopWatch.getTotalTimeSeconds()+"s");
 
