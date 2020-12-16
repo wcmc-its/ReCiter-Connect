@@ -104,7 +104,7 @@ public class AcademicFetchFromED {
 			else {
 				log.info("Person: "+pb.getCwid() + " already exist in VIVO");
 				checkForUpdates(pb);
-				//syncCOIData(pb);
+				syncCOIData(pb);
 				//syncPersonTypes(pb);
 			}
 			log.info("################################ End of " + pb.getCwid() + " - " + pb.getDisplayName() + " -  Insert/Update Operation ###################");
@@ -262,9 +262,11 @@ public class AcademicFetchFromED {
 			for(String nsType: pb.getNsTypes()) {
 				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> rdf:type " + nsType + " . \n");
 			}
-			/*if(this.vivoCoiMap.containsKey(pb.getCwid())) {
+			if(this.vivoCoiMap.containsKey(pb.getCwid())) {
 				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> \"" + this.vivoCoiMap.get(pb.getCwid()) + "\" . \n");
-			}*/
+			} else {
+				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> \"<div id='external-relationships-container'><p>No External Relationships Currently Reported</p></div>\" . \n");
+			}
 			sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:personLabel \"" + pb.getDisplayName().trim() + "\" . \n");
 			sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:cwid \"" + pb.getCwid().trim() + "\" . \n");
 			sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> rdfs:label \"" + lastMiddleFirst + "\" . \n");
@@ -886,6 +888,27 @@ public class AcademicFetchFromED {
 					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			} else {
 				log.info("No external relationships exist for " + pb.getCwid());
+				StringBuilder sb = new StringBuilder();
+				sb.append("WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n");
+				sb.append("DELETE { \n");
+				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> ?o .\n");
+				sb.append("} \n");
+				sb.append("INSERT { \n");
+				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> \"<div id='external-relationships-container'><p>No External Relationships Currently Reported</p></div>\" . \n");
+				sb.append("} \n");
+				sb.append("WHERE { \n");
+				sb.append("OPTIONAL {<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> ?o .}\n");
+				sb.append("}");
+				
+				log.info(sb.toString());
+				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+				try {
+					runSparqlUpdateTemplate(sb.toString(), vivoJena);
+				} catch(IOException e) {
+					log.error("IOException: ",e);
+				}
+				if(vivoJena!= null)
+					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			}
 		}
 
@@ -895,12 +918,12 @@ public class AcademicFetchFromED {
 			String coi = null;
 			
 			StringBuilder selectQuery = new StringBuilder();
-			selectQuery.append("select p.cwid, \n");
-			selectQuery.append("case when conflicts is not null then conflicts else \"<div id='conflict-container'><p>No External Relationships Currently Reported</p></div>\" end as conflicts \n");
+			selectQuery.append("select distinct m.cwid, \n");
+			selectQuery.append("concat(conflicts,'</div>') \n");
 			selectQuery.append("from v_coi_vivo_activity_group m \n");
 			selectQuery.append("join  ( \n");
-			selectQuery.append("select z.cwid, concat(\"<div id='conflict-container'>\",group_concat(distinct activityGroupData separator ''),\"</div>\") as conflicts \n");
-			selectQuery.append("from (select cwid, concat(\"<div class='conflict'><span class='activity-group-label'>\",vivo_pops_activity_group,\": </span>\",\"<span class='activity-group-data'>\",replace(replace(group_concat(distinct entity order by entity separator '; '),\"(*)\",\"\"),\" ;\",\";\"),\"</span></div>\") as activityGroupData \n");
+			selectQuery.append("select z.cwid, concat(\"<p class='conflicts-explanation'>Relationships and collaborations with for-profit and not-for-profit organizations are of vital importance to our faculty because these exchanges of scientific information foster innovation. As experts in their fields, WCM physicians and scientists are sought after by many organizations to consult and educate. WCM and its faculty make this information available to the public, thus creating a transparent environment.</p><div id='grid-container'>\",group_concat(distinct activityGroupData separator ''),\"\") as conflicts \n");
+			selectQuery.append("from (select cwid, concat(\"<div class='conflicts-description'><div class='tooltip'><span id='tooltip-what'><img class='whatisthisquestion' src='https://www.dropbox.com/s/j2w8881v0lec0gu/infobutton1.png?dl=1' width='20'></span><span class='tooltiptext'>\",description,\"</span>\",vivo_pops_activity_group,\":</div></div><div class='conflicts-list'>\",replace(replace(group_concat(distinct entity order by entity separator '; '),\"(*)\",\"\"),\" ;\",\";\"),\"</div>\") as activityGroupData \n");
 			selectQuery.append("from v_coi_vivo_activity_group \n");
 			selectQuery.append("where vivo_pops_activity_group is not null \n");
 			selectQuery.append("group by cwid, vivo_pops_activity_group) z \n");
