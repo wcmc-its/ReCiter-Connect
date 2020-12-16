@@ -124,7 +124,7 @@ public class Application implements ApplicationRunner {
 
         try {
             List<PeopleBean> people = academicFetchFromED.getActivePeopleFromED();
-            deleteProfile.execute();
+            //deleteProfile.execute();
             List<List<PeopleBean>> peopleSubSets = Lists.partition(people, 10);
             Iterator<List<PeopleBean>> subSetsIteratorPeople = peopleSubSets.iterator();
             while (subSetsIteratorPeople.hasNext()) {
@@ -150,7 +150,7 @@ public class Application implements ApplicationRunner {
                 }
                 callables.clear();
             }
-            List<String> peopleCwids = people.stream().map(PeopleBean::getCwid).collect(Collectors.toList());
+            /*List<String> peopleCwids = people.stream().map(PeopleBean::getCwid).collect(Collectors.toList());
             
             List<List<String>> peopleCwidsSubSets = Lists.partition(peopleCwids, 5);
             Iterator<List<String>> subSetsIteratorPeopleCwids = peopleCwidsSubSets.iterator();
@@ -177,19 +177,19 @@ public class Application implements ApplicationRunner {
                     log.error("Unable to invoke callable.", e);
                 }
                 callables.clear();
-            }
+            }*/
 
             //Close Connections
             if (ldapConnectionFactory != null)
             ldapConnectionFactory.destroyConnectionPool();
 
-            if (mysqlConnectionFactory != null)
+           if (mysqlConnectionFactory != null)
                 mysqlConnectionFactory.destroyConnectionPool();
 
-            if (mssqlConnectionFactory != null)
-                mssqlConnectionFactory.destroyConnectionPool();
+            /*if (mssqlConnectionFactory != null)
+                mssqlConnectionFactory.destroyConnectionPool();*/
 
-            for(List<String> subsetPeoples: peopleCwidsSubSets) {
+            /*for(List<String> subsetPeoples: peopleCwidsSubSets) {
                 List<Callable<String>> callables = new ArrayList<>();
                 try{
                     StopWatch stopWatch = new StopWatch("Getting Publications from ReCiter");
@@ -221,7 +221,7 @@ public class Application implements ApplicationRunner {
                     log.error("Unable to invoke callable.", e);
                 }
                 callables.clear();
-            } 
+            }*/
             
 
         } catch (Exception e) {
