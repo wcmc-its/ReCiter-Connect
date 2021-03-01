@@ -5,6 +5,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
@@ -707,31 +708,34 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
         SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
         if(articles != null && !articles.isEmpty()) {
             for (ArticleRetrievalModel articleRetrievalModel : articles) {
+                //Get publications from VIVO for personIdentifier
+                StringBuilder sb = new StringBuilder();
+                List<Long> vivoPublications = new ArrayList<>();
+                sb.append(QueryConstants.getSparqlPrefixQuery());
+                sb.append("select ?pubs \n");
+                sb.append("where { \n");
+                sb.append("GRAPH <" + VivoGraphs.PUBLICATIONS_GRAPH + "> {\n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "cwid-" + articleRetrievalModel.getPersonIdentifier() + "> core:relatedBy ?authorship . \n");
+                sb.append("?authorship core:relates ?publication . \n");
+                sb.append("?publication rdf:type core:InformationResource . \n");
+                sb.append("?publication rdf:type bibo:Document . \n");
+                sb.append("?publication rdf:type bibo:Article . \n");
+                sb.append("BIND(REPLACE(STR(?publication), \"https://vivo.med.cornell.edu/individual/pubid\", \"\") AS ?pubs) \n");
+                sb.append("}}");
+                
+                try {
+                    ResultSet rs = vivoJena.executeSelectQuery(sb.toString(), true);
+                    while(rs.hasNext()) {
+                        QuerySolution qs = rs.nextSolution();
+                        vivoPublications.add(Long.parseLong(qs.get("pubs").toString()));
+                    }
+                } catch(IOException e) {
+                    log.error("Error connecting to SDBJena");
+                }
+
                 if(articleRetrievalModel.getReCiterArticleFeatures() != null && !articleRetrievalModel.getReCiterArticleFeatures().isEmpty()) {
                     log.info("*******************Starting publication import for " + articleRetrievalModel.getPersonIdentifier() + "************************");
-                    StringBuilder sb = new StringBuilder();
-                    List<Long> vivoPublications = new ArrayList<>();
-                    sb.append(QueryConstants.getSparqlPrefixQuery());
-                    sb.append("select ?pubs \n");
-                    sb.append("where { \n");
-                    sb.append("GRAPH <" + VivoGraphs.PUBLICATIONS_GRAPH + "> {\n");
-                    sb.append("<" + JenaConnectionFactory.nameSpace + "cwid-" + articleRetrievalModel.getPersonIdentifier() + "> core:relatedBy ?authorship . \n");
-                    sb.append("?authorship core:relates ?publication . \n");
-                    sb.append("?publication rdf:type core:InformationResource . \n");
-                    sb.append("?publication rdf:type bibo:Document . \n");
-                    sb.append("?publication rdf:type bibo:Article . \n");
-                    sb.append("BIND(REPLACE(STR(?publication), \"https://vivo.med.cornell.edu/individual/pubid\", \"\") AS ?pubs) \n");
-                    sb.append("}}");
                     
-                    try {
-                        ResultSet rs = vivoJena.executeSelectQuery(sb.toString(), true);
-                        while(rs.hasNext()) {
-                            QuerySolution qs = rs.nextSolution();
-                            vivoPublications.add(Long.parseLong(qs.get("pubs").toString()));
-                        }
-                    } catch(IOException e) {
-                        log.error("Error connecting to SDBJena");
-                    }
                     List<Long> reciterPublications = articleRetrievalModel.getReCiterArticleFeatures()
                                                         .stream()
                                                         .map(ReCiterArticleFeature::getPmid)
@@ -760,6 +764,13 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                     syncPublications(articleRetrievalModel.getReCiterArticleFeatures(), vivoPubs, vivoJena);
                     deletePublicationsVivo(vivoPubs, reciterPublications, vivoJena, articleRetrievalModel.getPersonIdentifier());
                     log.info("*******************Ending publication import for " + articleRetrievalModel.getPersonIdentifier() + "************************");
+                } else {
+                    //When number of accepted Publications from ReCiter is empty then delete publication from VIVO 
+                    log.info("*******************Check to see if Publications needs to be deleted for " + articleRetrievalModel.getPersonIdentifier() + "************************");
+                    List<Long> reciterPublications = Collections.emptyList();
+                    deletePublicationsVivo(vivoPublications, reciterPublications, vivoJena, articleRetrievalModel.getPersonIdentifier());
+                    log.info("*******************Publication deletion ends for " + articleRetrievalModel.getPersonIdentifier() + "************************");
+
                 }
 
             }
