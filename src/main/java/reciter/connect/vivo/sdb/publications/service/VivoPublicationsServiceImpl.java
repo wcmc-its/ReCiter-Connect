@@ -821,6 +821,37 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                         log.error("ERROR: The pub is " + pmid);
                     }
                 }
+
+                //Delete from kb-inf graph
+                sb.setLength(0);
+                sb.append(QueryConstants.getSparqlPrefixQuery());
+                sb.append("WITH <" + VivoGraphs.VITRO_KB_INF_GRAPH + "> \n");
+                sb.append("DELETE { \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> ?p ?o . \n");
+                sb.append("} \n");
+                sb.append("WHERE { \n");
+                sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> ?p ?o . \n");
+                sb.append("}");
+
+                log.info("Deleting publication " + pmid + " from VIVO Kb-Inf graph");
+                if(ingestType.equals(IngestType.VIVO_API.toString())) {
+                    try{
+                        String response = this.vivoClient.vivoUpdateApi(sb.toString());
+                        log.info(response);
+                    } catch(Exception  e) {
+                        log.info("Api Exception", e);
+                    }
+                } else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+                    try {
+                        vivoJena.executeUpdateQuery(sb.toString(), true);
+                    } catch(IOException e) {
+                        log.error("Error connecting to SDBJena");
+                    }
+                    catch(QueryParseException qpe) {
+                        log.error("QueryParseException", qpe);
+                        log.error("ERROR: The pub is " + pmid);
+                    }
+                }
             }
         } else {
             log.info("No Publications to delete from VIVO");
