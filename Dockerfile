@@ -1,4 +1,4 @@
-FROM openjdk:11.0.8-jre-slim
+FROM adoptopenjdk/openjdk11:alpine-jre
 RUN mkdir -p /app
 WORKDIR /app
 ARG JAR_FILE=target/*.jar
