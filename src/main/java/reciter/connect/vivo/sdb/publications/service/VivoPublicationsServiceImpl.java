@@ -803,14 +803,14 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                 sb.append("} \n");
 
                 log.info("Deleting publication " + pmid + " from VIVO");
-                if(ingestType.equals(IngestType.VIVO_API.toString())) {
+                /*if(ingestType.equals(IngestType.VIVO_API.toString())) {
                     try{
                         String response = this.vivoClient.vivoUpdateApi(sb.toString());
                         log.info(response);
                     } catch(Exception  e) {
                         log.info("Api Exception", e);
                     }
-                } else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+                } else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {*/
                     try {
                         vivoJena.executeUpdateQuery(sb.toString(), true);
                     } catch(IOException e) {
@@ -820,7 +820,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                         log.error("QueryParseException", qpe);
                         log.error("ERROR: The pub is " + pmid);
                     }
-                }
+                //}
 
                 //Delete from kb-inf graph
                 sb.setLength(0);
@@ -834,14 +834,14 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                 sb.append("}");
 
                 log.info("Deleting publication " + pmid + " from VIVO Kb-Inf graph");
-                if(ingestType.equals(IngestType.VIVO_API.toString())) {
+                /*if(ingestType.equals(IngestType.VIVO_API.toString())) {
                     try{
                         String response = this.vivoClient.vivoUpdateApi(sb.toString());
                         log.info(response);
                     } catch(Exception  e) {
                         log.info("Api Exception", e);
                     }
-                } else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+                } else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {*/
                     try {
                         vivoJena.executeUpdateQuery(sb.toString(), true);
                     } catch(IOException e) {
@@ -851,7 +851,7 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                         log.error("QueryParseException", qpe);
                         log.error("ERROR: The pub is " + pmid);
                     }
-                }
+                //}
             }
         } else {
             log.info("No Publications to delete from VIVO");
