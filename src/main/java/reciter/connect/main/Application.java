@@ -1,6 +1,5 @@
 package reciter.connect.main;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -11,7 +10,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
-import javax.annotation.PostConstruct;
 import javax.net.ssl.SSLException;
 
 import com.google.common.collect.Lists;
@@ -24,8 +22,6 @@ import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ApplicationContext;
-import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.PropertySource;
@@ -46,7 +42,6 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.netty.http.client.HttpClient;
 import reciter.connect.api.client.ReCiterClient;
 import reciter.connect.api.client.model.ArticleRetrievalModel;
-import reciter.connect.api.client.model.exception.ApiException;
 import reciter.connect.beans.vivo.PeopleBean;
 import reciter.connect.database.ldap.LDAPConnectionFactory;
 import reciter.connect.database.mssql.MssqlConnectionFactory;
@@ -54,7 +49,6 @@ import reciter.connect.database.mysql.MysqlConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
 import reciter.connect.vivo.api.client.VivoClient;
 import reciter.connect.vivo.sdb.publications.service.VivoPublicationsService;
-import reciter.connect.vivo.sdb.query.SDBQueryInterface;
 
 @SpringBootApplication
 @PropertySource("classpath:application.properties")
@@ -197,35 +191,42 @@ public class Application implements ApplicationRunner {
                     log.info("Getting publications for group : " + subsetPeoples.toString());
                     List<ArticleRetrievalModel> allPubs = reCiterClient
                                 .getPublicationsByGroup(subsetPeoples)
+                                .onErrorContinue((error, data) -> {
+                                    log.error("Exception with bulk retrieval for group" + subsetPeoples.toString());
+                                })
                                 .collectList()
                                 .block();
                     stopWatch.stop();
-                    log.info("Publications fetch Time taken: " + stopWatch.getTotalTimeSeconds() + "s");
-                    callables.add(vivoPublicationsService.getCallable(allPubs));
+                    if(!allPubs.isEmpty()) {
+                        log.info("Publications fetch Time taken: " + stopWatch.getTotalTimeSeconds() + "s");
+                        callables.add(vivoPublicationsService.getCallable(allPubs));
+                    }
                 } catch(Exception e) {
-                    log.error("Exception", e); 
+                    log.error("Bulk Retrieval Exception", e);
                 }
-                log.info("Publications fetch will run for " + subsetPeoples.toString());
-                try {
-                    executor.invokeAll(callables)
-                    .stream()
-                    .map(future -> {
-                        try {
-                            return future.get();
-                        }
-                        catch (Exception e) {
-                            throw new IllegalStateException(e);
-                        }
-                    }).forEach(System.out::println);
-                } catch (InterruptedException e) {
-                    log.error("Unable to invoke callable.", e);
+                if(!callables.isEmpty()) {
+                    log.info("Publications fetch will run for " + subsetPeoples.toString());
+                    try {
+                        executor.invokeAll(callables)
+                        .stream()
+                        .map(future -> {
+                            try {
+                                return future.get();
+                            }
+                            catch (Exception e) {
+                                throw new IllegalStateException(e);
+                            }
+                        }).forEach(System.out::println);
+                    } catch (InterruptedException e) {
+                        log.error("Unable to invoke callable.", e);
+                    }
                 }
                 callables.clear();
             } 
             
 
         } catch (Exception e) {
-            log.error("Exception", e);
+            log.error("Exception in application", e);
         }
 
         if (jenaConnectionFactory != null)
