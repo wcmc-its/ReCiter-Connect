@@ -191,9 +191,7 @@ public class Application implements ApplicationRunner {
                     log.info("Getting publications for group : " + subsetPeoples.toString());
                     List<ArticleRetrievalModel> allPubs = reCiterClient
                                 .getPublicationsByGroup(subsetPeoples)
-                                .onErrorContinue((error, data) -> {
-                                    log.error("Exception with bulk retrieval for group" + subsetPeoples.toString());
-                                })
+                                .onErrorReturn(new ArticleRetrievalModel())
                                 .collectList()
                                 .block();
                     stopWatch.stop();
