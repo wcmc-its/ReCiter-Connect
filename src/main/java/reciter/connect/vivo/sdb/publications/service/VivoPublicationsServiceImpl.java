@@ -456,10 +456,11 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
             sb.append("select ?citationCount ?pubType ?pmcid \n");
             sb.append("where { \n");
             sb.append("GRAPH <" + VivoGraphs.PUBLICATIONS_GRAPH + "> {\n");
+            sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> vitro:mostSpecificType ?pubType . \n");
+            sb.append("OPTIONAL {<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> core:pmcid ?pmcid . \n");
             sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> <http://purl.org/spar/c4o/hasGlobalCitationFrequency> ?citation . \n");
             sb.append("?citation rdfs:label ?citationCount . \n");
-            sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> vitro:mostSpecificType ?pubType . \n");
-            sb.append("OPTIONAL {<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> core:pmcid ?pmcid . }\n");
+            sb.append("} \n");
             sb.append("}}");
             
             try {
@@ -625,6 +626,28 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                                         log.error("ERROR: The pub is " + pmid);
                                     }
                                 }
+                                //Delete from kb-inf graph
+                                sb.setLength(0);
+                                sb.append(QueryConstants.getSparqlPrefixQuery());
+                                sb.append("WITH <" + VivoGraphs.VITRO_KB_INF_GRAPH + "> \n");
+                                sb.append("DELETE { \n");
+                                sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> vitro:mostSpecificType ?mostSpecificType . \n");
+                                sb.append("} \n");
+                                sb.append("WHERE { \n");
+                                sb.append("<" + JenaConnectionFactory.nameSpace + "pubid" + pmid + "> vitro:mostSpecificType ?mostSpecificType . \n");
+                                sb.append("}");
+                                if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+                                    try {
+                                        vivoJena.executeUpdateQuery(sb.toString(), true);
+                                    } catch(IOException e) {
+                                        log.error("Error connecting to SDBJena");
+                                    }
+                                    catch(QueryParseException qpe) {
+                                        log.error("QueryParseException", qpe);
+                                        log.error("ERROR: The pub is " + pmid);
+                                    }
+                                }
+
                             } else {
                                 log.info("Publications Type is in sync for publication - " + pmid);
                             }
