@@ -63,7 +63,7 @@ public class MysqlConnectionFactory {
 		this.username = username;
 		this.password = env.getProperty("VIVO_COI_DB_PASSWORD");
 		this.url = url;
-		initialize();
+		//initialize();
 	}
 	
 	/**

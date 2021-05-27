@@ -112,7 +112,7 @@ public class Application implements ApplicationRunner {
         AppointmentsFetchFromED appointmentsFetchFromED = context.getBean(AppointmentsFetchFromED.class);
         ReCiterClient reCiterClient = context.getBean(ReCiterClient.class);
         DeleteProfile deleteProfile = context.getBean(DeleteProfile.class);
-        academicFetchFromED.getCOIData();
+        //academicFetchFromED.getCOIData();
 
         ExecutorService executor = Executors.newFixedThreadPool(25);
 
