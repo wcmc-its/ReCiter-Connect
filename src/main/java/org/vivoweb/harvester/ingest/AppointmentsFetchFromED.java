@@ -256,7 +256,7 @@ public class AppointmentsFetchFromED {
 			
 			
 			log.info("Getting verbose equivalent for " + primaryAffiliation);
-			filter = "(o=" + primaryAffiliation + ")";
+			/*filter = "(o=" + primaryAffiliation + ")";
 			String basedn = "ou=organizations,ou=groups,dc=weill,dc=cornell,dc=edu";
 			results = this.lcf.searchWithBaseDN(filter,basedn);
 			
@@ -273,9 +273,103 @@ public class AppointmentsFetchFromED {
 	        }
 	        else {
 	            log.info("No results found");
-	        }
+	        }*/
+			switch (primaryAffiliation) {
+				case "MSKCC":
+					primaryAffiliation = "Memorial Sloan Kettering Cancer Center";
+					break;
+				case "WCMC":
+					primaryAffiliation = "Weill Cornell Medical College";
+					break;
+				case "CUCPS":
+					primaryAffiliation = "Columbia University College of Physicians and Surgeons";
+					break;
+				case "NYP":
+					primaryAffiliation = "New York-Presbyterian Hospital";
+					break;
+				case "WCMC-Q":
+					primaryAffiliation = "Weill Cornell Medical College in Qatar";
+					break;
+				case "NYMH":
+					primaryAffiliation = "New York Methodist Hospital";
+					break;
+				case "HSS":
+					primaryAffiliation = "Hospital for Special Surgery";
+					break;
+				case "NYPQ":
+					primaryAffiliation = "New York Presbyterian - Queens";
+					break;
+				case "RI":
+					primaryAffiliation = "Rogosin Institute";
+					break;
+				case "SIDRA":
+					primaryAffiliation = "SIDRA Medical and Research Center";
+					break;
+				case "HMC":
+					primaryAffiliation = "Hamad Medical Corporation";
+					break;
+				case "WMBMRI":
+					primaryAffiliation = "Winifred Masterson Burke Medical Research Institute";
+					break;
+				case "HMH":
+					primaryAffiliation = "Houston Methodist Hospital";
+					break;
+				case "RU":
+					primaryAffiliation = "Rockefeller University";
+					break;
+				case "LMMHC":
+					primaryAffiliation = "Lincoln Medical and Mental Health Center";
+					break;
+				case "Cornell":
+					primaryAffiliation = "Cornell University";
+					break;
+				case "AspH":
+					primaryAffiliation = "Aspetar Hospital";
+					break;
+				case "CMCIthaca":
+					primaryAffiliation = "Cayuga Medical Center of Ithaca";
+					break;
+				case "PHCC":
+					primaryAffiliation = "Primary Health Care Corporation (Qatar)";
+					break;
+				case "BHC":
+					primaryAffiliation = "The Brooklyn Hospital Center";
+					break;
+				case "FMMP":
+					primaryAffiliation = "Feto-Maternal Medical Polyclinic (Qatar)";
+					break;
+				case "HMRI":
+					primaryAffiliation = "Houston Methodist Research Institute";
+					break;
+				case "JamaicaH":
+					primaryAffiliation = "Jamaica Hospital";
+					break;
+				case "ANH":
+					primaryAffiliation = "Amsterdam Nursing Home";
+					break;
+				case "Lenox":
+					primaryAffiliation = "Lenox Hill Hospital";
+					break;
+				case "CU GHS":
+					primaryAffiliation = "Cornell University Gannette Health Services";
+					break;
+				case "FlushHMC":
+					primaryAffiliation = "Flushing Hospital Medical Center";
+					break;
+				case "AHP":
+					primaryAffiliation = "American Hospital of Paris";
+					break;
+				case "LaGuardH":
+					primaryAffiliation = "La Guardia Hospital";
+					break;
+				case "UGMA":
+					primaryAffiliation = "University Group Medical Associates";
+					break;
 			
-			
+				default:
+					primaryAffiliation = "Weill Cornell Medical College";
+					break;
+			}
 			ob.setRoles(modifiedRoles);
 			log.info("Primary Affiliation for cwid " + cwid + " is " + primaryAffiliation);
 			ob.setPrimaryAffiliation(primaryAffiliation);
