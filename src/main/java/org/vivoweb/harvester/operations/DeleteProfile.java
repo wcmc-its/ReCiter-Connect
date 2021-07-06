@@ -32,6 +32,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.jena.query.QuerySolution;
 import org.apache.jena.query.ResultSet;
 
+import com.unboundid.ldap.sdk.LDAPConnection;
 import com.unboundid.ldap.sdk.SearchResultEntry;
 
 import reciter.connect.beans.vivo.delete.profile.PublicationBean;
@@ -572,50 +573,52 @@ public class DeleteProfile {
 	 * This function checks for a supplied cwid whether the person is active in ED or not
 	 */
 	public boolean checkForInActivePeopleEd(String cwid) {
-		
 		boolean isActive = false;
+		LDAPConnection connection = this.lcf.getConnectionfromPool();
+		if(connection != null) {
+			this.lcf.returnConnectionToPool(connection);
+			List<SearchResultEntry> results = this.lcf.searchWithBaseDN("(&(objectClass=eduPerson)(weillCornellEduCWID=" + cwid + "))", "ou=people,dc=weill,dc=cornell,dc=edu");
 		
-		List<SearchResultEntry> results = this.lcf.searchWithBaseDN("(&(objectClass=eduPerson)(weillCornellEduCWID=" + cwid + "))", "ou=people,dc=weill,dc=cornell,dc=edu");
-	
-		if (results.size() == 1) {
-			SearchResultEntry entry = results.get(0);
-			if(entry.getAttributeValue("weillCornellEduCWID") != null) {
-				if(entry.getAttributeValues("weillCornellEduPersonTypeCode") != null) {
-					 String personType[] = new String[entry.getAttributeValues("weillCornellEduPersonTypeCode").length];
-					 personType = entry.getAttributeValues("weillCornellEduPersonTypeCode");
-					 List<String> ptypes = Arrays.asList(personType);
-					 if(ptypes.contains("academic")) 
-						 isActive = true;
-					 else
-						 isActive = false;
+			if (results.size() == 1) {
+				SearchResultEntry entry = results.get(0);
+				if(entry.getAttributeValue("weillCornellEduCWID") != null) {
+					if(entry.getAttributeValues("weillCornellEduPersonTypeCode") != null) {
+						String personType[] = new String[entry.getAttributeValues("weillCornellEduPersonTypeCode").length];
+						personType = entry.getAttributeValues("weillCornellEduPersonTypeCode");
+						List<String> ptypes = Arrays.asList(personType);
+						if(ptypes.contains("academic")) 
+							isActive = true;
+						else
+							isActive = false;
+					}
+					else
+						isActive = false;
+					
+					if(entry.getAttributeValue("sn") !=null ) 
+						this.familyName = StringEscapeUtils.escapeJava(entry.getAttributeValue("sn"));
+					
+					if(entry.getAttributeValue("givenName") !=null )
+						this.givenName = StringEscapeUtils.escapeJava(entry.getAttributeValue("givenName"));
+					
+					if(entry.getAttributeValue("weillCornellEduMiddleName") != null)
+						this.middleName = " " + StringEscapeUtils.escapeJava(entry.getAttributeValue("weillCornellEduMiddleName")) + " ";
+					else
+						this.middleName= " ";
+					
+					//logger.info(entry.toLDIFString());
+
 				}
 				else
 					isActive = false;
 				
-				if(entry.getAttributeValue("sn") !=null ) 
-					this.familyName = StringEscapeUtils.escapeJava(entry.getAttributeValue("sn"));
-				
-				if(entry.getAttributeValue("givenName") !=null )
-					this.givenName = StringEscapeUtils.escapeJava(entry.getAttributeValue("givenName"));
-				
-				if(entry.getAttributeValue("weillCornellEduMiddleName") != null)
-					this.middleName = " " + StringEscapeUtils.escapeJava(entry.getAttributeValue("weillCornellEduMiddleName")) + " ";
-				else
-					this.middleName= " ";
-				
-				//logger.info(entry.toLDIFString());
-
 			}
 			else
 				isActive = false;
 			
-		}
-		else
-			isActive = false;
-		
-		if(isActive==false) {
-			if(this.givenName == null && this.familyName == null)
-			getNamesFromVivo(cwid);
+			if(isActive==false) {
+				if(this.givenName == null && this.familyName == null)
+				getNamesFromVivo(cwid);
+			}
 		}
 		return isActive;
 	}
