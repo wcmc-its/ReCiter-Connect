@@ -619,7 +619,8 @@ public class DeleteProfile {
 				if(this.givenName == null && this.familyName == null)
 				getNamesFromVivo(cwid);
 			}
-		}
+		} else 
+			isActive = true;
 		return isActive;
 	}
 	
