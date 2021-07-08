@@ -108,7 +108,7 @@ public class GrantsFetchFromED {
 				if(grant.isEmpty())
 					log.info("There is no grants for cwid - " + cwid + " in Coeus");
 				checkGrantExistInVivo(grant,cwid);
-				//deleteConfidentialGrants(grant, cwid);
+				deleteConfidentialGrants(grant, cwid);
 				log.info("#########################################################");
 			}
 			
@@ -830,12 +830,8 @@ public class GrantsFetchFromED {
 					sb.append("?orgUnit obo:RO_0000053 <" + this.vivoNamespace + "administrator-role-" + grantid.trim() + "> . \n");
 					sb.append("}");
 					
-					try {
-						vivoJena.executeUpdateQuery(sb.toString(), true);
-						
-					} catch(IOException e) {
-						log.error("IOException" ,e);
-					}
+					String response = this.vivoClient.vivoUpdateApi(sb.toString());
+                    log.info(response);
 					
 					for(Entry<String, String> entry : roles.entrySet()) {
 						sb.setLength(0);
@@ -845,12 +841,9 @@ public class GrantsFetchFromED {
 						sb.append("} WHERE { \n");
 						sb.append("<" + entry.getKey() + "> ?rolePred ?roleObj . \n");
 						sb.append("}");
-						try {
-							vivoJena.executeUpdateQuery(sb.toString(), true);
-							
-						} catch(IOException e) {
-							log.error("IOException" ,e);
-						}
+
+						response = this.vivoClient.vivoUpdateApi(sb.toString());
+                    	log.info(response);
 						
 						sb.setLength(0);
 						sb.append("PREFIX obo: <http://purl.obolibrary.org/obo/> \n");
@@ -863,12 +856,9 @@ public class GrantsFetchFromED {
 						sb.append("<" + entry.getValue() + "> core:relatedBy <" + this.vivoNamespace + "grant-" + grantid.trim() + "> . \n");
 						sb.append("<" + entry.getValue() + "> obo:RO_0000053 <" + entry.getKey() + "> . \n");
 						sb.append("}");
-						try {
-							vivoJena.executeUpdateQuery(sb.toString(), true);
-							
-						} catch(IOException e) {
-							log.error("IOException" ,e);
-						}
+
+						response = this.vivoClient.vivoUpdateApi(sb.toString());
+                    	log.info(response);
 					}
 					//Delete from inf graph
 					for(Entry<String, String> entry : roles.entrySet()) {
@@ -881,12 +871,9 @@ public class GrantsFetchFromED {
 						sb.append("OPTIONAL {<" + entry.getKey() + "> ?rolePred ?roleObj . }\n");
 						sb.append("OPTIONAL {<" + this.vivoNamespace + "grant-" + grantid.trim() + "> ?p ?o . }\n");
 						sb.append("}");
-						try {
-							vivoKbInf.executeUpdateQuery(sb.toString(), true);
-							
-						} catch(IOException e) {
-							log.error("IOException" ,e);
-						}
+
+						response = this.vivoClient.vivoUpdateApi(sb.toString());
+                    	log.info(response);
 					}
 				}
 				
