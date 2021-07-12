@@ -239,7 +239,7 @@ public class Application implements ApplicationRunner {
         if(con != null) {
             int result = 0;
             PreparedStatement pst = null;
-            String sql = "ALTER TABLE Quads ENGINE=InnoDB;";
+            String sql = "ALTER TABLE Quads ENGINE=InnoDB";
                     
             try {
                 pst = con.prepareStatement(sql);
