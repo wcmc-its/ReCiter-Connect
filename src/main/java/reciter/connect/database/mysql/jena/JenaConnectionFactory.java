@@ -1,10 +1,13 @@
 package reciter.connect.database.mysql.jena;
 
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.sql.DriverManager;
 
 import javax.inject.Inject;
 import org.springframework.context.annotation.Scope;
@@ -181,5 +184,22 @@ public class JenaConnectionFactory {
 		}
 		return vivoJena;
 	
+	}
+
+	public Connection getDirectConnectionToVivoDatabase()
+	{
+		
+		Connection con = null;
+		
+		if (!this.dbHost.isEmpty() && !this.jenaDbUser.isEmpty() && !this.jenaDbPassword.isEmpty()) {
+
+					try {
+						con = DriverManager.getConnection(this.dbHost, this.jenaDbUser, this.jenaDbPassword);
+					} 
+					catch(SQLException e) {
+						log.error("SQLException: " , e);
+					} 
+		}
+		return con;
 	}
 }
