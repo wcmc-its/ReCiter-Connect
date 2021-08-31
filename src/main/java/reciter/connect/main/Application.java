@@ -233,31 +233,6 @@ public class Application implements ApplicationRunner {
 
         if (jenaConnectionFactory != null)
             jenaConnectionFactory.destroyConnectionPool();
-        
-
-        Connection con = jenaConnectionFactory.getDirectConnectionToVivoDatabase();
-        if(con != null) {
-            int result = 0;
-            PreparedStatement pst = null;
-            String sql = "ALTER TABLE Quads ENGINE=InnoDB";
-                    
-            try {
-                pst = con.prepareStatement(sql);
-                result = pst.executeUpdate();
-                log.info("Altered Table Quads Engine - Result: " + result);
-            } catch(SQLException e) {
-                log.error("Exception occured in query= " + sql, e);
-            }
-            finally {
-                try {
-                    pst.close();
-                    if(con != null)
-                        con.close();
-                } catch(SQLException e) {
-                    log.error("Unabled to close connection to Mysql DB.", e);
-                }
-            }
-        }
 
         System.exit(0);
     }
