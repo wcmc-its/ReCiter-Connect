@@ -51,6 +51,7 @@ import reciter.connect.database.ldap.LDAPConnectionFactory;
 import reciter.connect.database.mssql.MssqlConnectionFactory;
 import reciter.connect.database.mysql.MysqlConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
+import reciter.connect.database.tdb.TDBConnectionFactory;
 import reciter.connect.vivo.api.client.VivoClient;
 import reciter.connect.vivo.sdb.publications.service.VivoPublicationsService;
 
@@ -111,11 +112,15 @@ public class Application implements ApplicationRunner {
         MysqlConnectionFactory mysqlConnectionFactory = context.getBean(MysqlConnectionFactory.class);
         MssqlConnectionFactory mssqlConnectionFactory = context.getBean(MssqlConnectionFactory.class);
         JenaConnectionFactory jenaConnectionFactory = context.getBean(JenaConnectionFactory.class);
+        //TDBConnectionFactory tdbConnectionFactory = context.getBean(TDBConnectionFactory.class);
         AcademicFetchFromED academicFetchFromED = context.getBean(AcademicFetchFromED.class);
         GrantsFetchFromED grantsFetchFromED = context.getBean(GrantsFetchFromED.class);
         AppointmentsFetchFromED appointmentsFetchFromED = context.getBean(AppointmentsFetchFromED.class);
         ReCiterClient reCiterClient = context.getBean(ReCiterClient.class);
         DeleteProfile deleteProfile = context.getBean(DeleteProfile.class);
+        mssqlConnectionFactory.createC3PODatasourceForASMS();
+        mssqlConnectionFactory.createC3PODatasourceForInfoEd();
+
         //academicFetchFromED.getCOIData();
 
         ExecutorService executor = Executors.newFixedThreadPool(25);
@@ -184,8 +189,11 @@ public class Application implements ApplicationRunner {
             if (mysqlConnectionFactory != null)
                 mysqlConnectionFactory.destroyConnectionPool();
 
-            if (mssqlConnectionFactory != null)
-                mssqlConnectionFactory.destroyConnectionPool();
+            /*if (mssqlConnectionFactory != null)
+                mssqlConnectionFactory.destroyConnectionPool();*/
+
+            MssqlConnectionFactory.dataSourceCleanup(MssqlConnectionFactory.getASMSDataSource());
+            MssqlConnectionFactory.dataSourceCleanup(MssqlConnectionFactory.getInfoedDataSource());
 
             for(List<String> subsetPeoples: peopleCwidsSubSets) {
                 List<Callable<String>> callables = new ArrayList<>();
@@ -224,7 +232,7 @@ public class Application implements ApplicationRunner {
                     }
                 }
                 callables.clear();
-            } 
+            }
             
 
         } catch (Exception e) {

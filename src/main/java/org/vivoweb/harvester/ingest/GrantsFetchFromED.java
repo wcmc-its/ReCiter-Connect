@@ -28,11 +28,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StopWatch;
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
+import org.vivoweb.harvester.util.repo.TDBJenaConnect;
 
 import lombok.extern.slf4j.Slf4j;
 import reciter.connect.beans.vivo.GrantBean;
 import reciter.connect.database.mssql.MssqlConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
+import reciter.connect.database.tdb.TDBConnectionFactory;
 import reciter.connect.vivo.IngestType;
 import reciter.connect.vivo.api.client.VivoClient;
 
@@ -68,12 +70,15 @@ public class GrantsFetchFromED {
 	private JenaConnectionFactory jcf;
 
 	@Autowired
+	private TDBConnectionFactory tcf;
+
+	@Autowired
 	private VivoClient vivoClient;
 	
 	/**
 	 * The default namespace for VIVO
 	 */
-	private String vivoNamespace = JenaConnectionFactory.nameSpace;
+	private String vivoNamespace = TDBConnectionFactory.nameSpace;
 
 	private String ingestType = System.getenv("INGEST_TYPE");
 	
@@ -140,9 +145,8 @@ public class GrantsFetchFromED {
 		 * @param cwid unique identifier for faculty
 		 */
 		private void checkGrantExistInVivo(List<GrantBean> grants, String cwid) {
-			SDBJenaConnect vivoJena = null;
 			for(int i=0; i< grants.size(); i++) {
-				vivoJena = this.jcf.getConnectionfromPool("dataSet");
+				
 				String sparqlQuery = "PREFIX rdf:      <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 					 "PREFIX foaf:     <http://xmlns.com/foaf/0.1/> \n" +
 					 "SELECT  (count(?o) as ?grant) \n" +
@@ -174,7 +178,8 @@ public class GrantsFetchFromED {
 					} catch(Exception e) {
 						log.error("Api Exception", e);
 					}
-				} else {
+				} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+					SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 					try {
 						ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery, true);
 						
@@ -190,6 +195,29 @@ public class GrantsFetchFromED {
 						}
 						else {
 							this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+							insertGrantsInVivo(grants.get(i),cwid,"INSERT");
+							this.insertCount = this.insertCount + 1;
+						}
+					} catch(IOException e) {
+						log.error("IOException" ,e);
+					}
+				} else {
+					TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
+					try {
+						ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery, true);
+						
+						QuerySolution qs = rs.nextSolution();
+						
+						
+						int count = Integer.parseInt(qs.get("grant").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
+						if(count > 0) {
+							log.info("Grant- " + grants.get(i).getAwardNumber() + " exists in VIVO");
+							this.tcf.returnConnectionToPool(vivoJena, "dataSet");
+							//This is done to return the connection for coeus since it is being used again in the update function
+							checkForUpdates(grants.get(i), cwid, "UPDATE");
+						}
+						else {
+							this.tcf.returnConnectionToPool(vivoJena, "dataSet");
 							insertGrantsInVivo(grants.get(i),cwid,"INSERT");
 							this.insertCount = this.insertCount + 1;
 						}
@@ -216,7 +244,7 @@ public class GrantsFetchFromED {
 			DateFormat shortFormat = new SimpleDateFormat("yyyy-MM-dd",Locale.ENGLISH);
 			DateFormat mediumFormat = new SimpleDateFormat("dd-MMM-yy",Locale.ENGLISH);
 			DateFormat yearFormat = new SimpleDateFormat("yyyy",Locale.ENGLISH);
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+			
 			//get contributor list & date interval for that grant from VIVO
 			StringBuilder sb = new StringBuilder();
 			sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
@@ -248,7 +276,8 @@ public class GrantsFetchFromED {
 				} catch(Exception e) {
 					log.error("API Exception" ,e);
 				}	
-			} else {
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 				try{
 					ResultSet rs = vivoJena.executeSelectQuery(sb.toString(), true);
 					while(rs.hasNext()) {
@@ -260,6 +289,23 @@ public class GrantsFetchFromED {
 				} catch(IOException e) {
 					log.error("IOException" ,e);
 				}
+				if(vivoJena!= null)
+					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+			} else {
+				TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
+				try{
+					ResultSet rs = vivoJena.executeSelectQuery(sb.toString(), true);
+					while(rs.hasNext()) {
+						QuerySolution qs = rs.nextSolution();
+						contributors.add(qs.get("person").toString().replace(this.vivoNamespace + "cwid-", "").trim());
+						dateTimeInterval = qs.get("dateTimeInterval").toString().replace(this.vivoNamespace + "dtinterval-", "").trim();
+					}
+					
+				} catch(IOException e) {
+					log.error("IOException" ,e);
+				}
+				if(vivoJena!= null)
+					this.tcf.returnConnectionToPool(vivoJena, "dataSet");
 			}
 			
 			//Checking for new contributors
@@ -639,11 +685,23 @@ public class GrantsFetchFromED {
 						log.info("Api Exception", e);
 					}
 				} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+					SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 					try {
 						vivoJena.executeUpdateQuery(sb.toString(), true);
 					} catch(IOException e) {
 						log.error("Error connecting to Jena database", e);
 					}
+					if(vivoJena!= null)
+						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+				} else {
+					TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
+					try {
+						vivoJena.executeUpdateQuery(sb.toString(), true);
+					} catch(IOException e) {
+						log.error("Error connecting to Jena database", e);
+					}
+					if(vivoJena!= null)
+						this.tcf.returnConnectionToPool(vivoJena, "dataSet");
 				}
 				gb.setContributors(newContributors);
 				
@@ -654,8 +712,6 @@ public class GrantsFetchFromED {
 			}
 			else
 				log.info("No updates are necessary for grant-" + gb.getAwardNumber());
-			
-			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			if(ingestType.equals(IngestType.VIVO_API.toString())) {
 				checkForSponsorUpdateUsingTDB(gb);
 			} else {
@@ -668,7 +724,7 @@ public class GrantsFetchFromED {
 		 * @param gb
 		 */
 		private void checkForSponsorUpdate(GrantBean gb) {	
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");		
+			TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");		
 			//get contributor list & date interval for that grant from VIVO
 			StringBuilder sb = new StringBuilder();
 			sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
@@ -772,7 +828,7 @@ public class GrantsFetchFromED {
 			} catch(IOException e) {
 				log.error("IOException" ,e);
 			}
-			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+			this.tcf.returnConnectionToPool(vivoJena, "dataSet");
 		}
 
 		/**
@@ -901,9 +957,9 @@ public class GrantsFetchFromED {
 		 */
 		private void deleteConfidentialGrants(List<GrantBean> grants, String cwid) {
 			
-			SDBJenaConnect vivoJena = null;
-			vivoJena = this.jcf.getConnectionfromPool("dataSet");
-			SDBJenaConnect vivoKbInf = this.jcf.getConnectionfromPool("dataSet");
+			TDBJenaConnect vivoJena = null;
+			vivoJena = this.tcf.getConnectionfromPool("dataSet");
+			TDBJenaConnect vivoKbInf = this.tcf.getConnectionfromPool("dataSet");
 			List<String> vivoGrants = new ArrayList<String>();
 			List<String> infoEdgrants = grants.stream().map(grant -> grant.getAwardNumber()).collect(Collectors.toList());
 			
@@ -1047,8 +1103,8 @@ public class GrantsFetchFromED {
 			} else {
 				log.info("No confidential grants in VIVO for cwid: " + cwid);
 			}
-			this.jcf.returnConnectionToPool(vivoKbInf, "dataSet");
-			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+			this.tcf.returnConnectionToPool(vivoKbInf, "dataSet");
+			this.tcf.returnConnectionToPool(vivoJena, "dataSet");
 		}
 
 		/**
@@ -1884,7 +1940,7 @@ public class GrantsFetchFromED {
 				} catch(Exception e) {
 					log.error("API Exception" ,e);
 				}
-			} else {
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
 				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 				log.info("Inserting inference triples for grant-" + gb.getAwardNumber());
 				try {
@@ -1894,6 +1950,16 @@ public class GrantsFetchFromED {
 					log.error("IOException" ,e);
 				}
 				this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+			} else {
+				TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
+				log.info("Inserting inference triples for grant-" + gb.getAwardNumber());
+				try {
+					vivoJena.executeUpdateQuery(sb.toString(), true);
+					
+				} catch(IOException e) {
+					log.error("IOException" ,e);
+				}
+				this.tcf.returnConnectionToPool(vivoJena, "dataSet");
 			}
 		}
 		
@@ -1904,10 +1970,11 @@ public class GrantsFetchFromED {
 		 * @return list of grants
 		 */
 		private List<GrantBean> getGrantsFromCoeus(String cwid, List<String> people) {
-			
-			Connection con = mcf.getInfoEdConnectionfromPool("INFOED");
+			PreparedStatement ps = null;
+			java.sql.ResultSet rs = null;
 			List<GrantBean> grant = new ArrayList<GrantBean>();
-			
+			try {
+			Connection con = MssqlConnectionFactory.getInfoedDataSource().getConnection();//mcf.getInfoEdConnectionfromPool("INFOED");
 			StringBuilder selectQuery = new StringBuilder();
 			
 			selectQuery.append("select distinct v.CWID,v.Account_Number,x.Award_Number,REPLACE(CONVERT(NVARCHAR, begin_date, 106), ' ', '-') as begin_date,REPLACE(CONVERT(NVARCHAR, end_date, 106), ' ', '-') as end_date,replace(replace(replace(z.proj_title,char(13),' '),char(10),' '),'	','') as proj_title, z.unit_name, z.int_unit_code, z.program_type,z.Orig_Sponsor,");
@@ -1925,9 +1992,8 @@ public class GrantsFetchFromED {
 			
 			//log.info(selectQuery.toString());
 			
-			PreparedStatement ps = null;
-			java.sql.ResultSet rs = null;
-			try {
+			
+			
 				ps = con.prepareStatement(selectQuery.toString());
 				rs = ps.executeQuery();
 				while(rs.next()) {
@@ -1989,8 +2055,8 @@ public class GrantsFetchFromED {
 						ps.close();
 					if(rs!=null)
 						rs.close();
-					if(con != null)
-						mcf.returnConnectionToPool("INFOED", con);
+					/*if(con != null)
+						mcf.returnConnectionToPool("INFOED", con);*/
 				}
 				catch(Exception e) {
 					log.error("Exception",e);
@@ -2078,10 +2144,12 @@ public class GrantsFetchFromED {
 		 * @return the deptID
 		 */
 		private String getDepartmentCode(String deptName, String unitCode, GrantBean gb) {
-			Connection con = mcf.getAsmsConnectionfromPool("ASMS");
 			String deptId = null;
 			java.sql.ResultSet rs = null;
 			Statement st = null;
+			try {
+			Connection con =  MssqlConnectionFactory.getASMSDataSource().getConnection();//mcf.getAsmsConnectionfromPool("ASMS");
+			
 			
 			//log.info("Department Name in ED: " + deptName);
 			
@@ -2108,7 +2176,7 @@ public class GrantsFetchFromED {
 			
 			//log.info(selectQuery);
 			
-				try {
+				
 					st = con.createStatement();
 					rs = st.executeQuery(selectQuery);
 					if(rs!=null) { 
@@ -2130,8 +2198,8 @@ public class GrantsFetchFromED {
 								rs.close();
 							if(st != null)
 								st.close();
-							if(con != null)
-								mcf.returnConnectionToPool("ASMS", con);
+							/*if(con != null)
+								mcf.returnConnectionToPool("ASMS", con);*/
 						} catch(SQLException e) {
 							log.error("Error in closing connections:", e);
 						}

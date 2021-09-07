@@ -14,24 +14,37 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
-import org.json.JSONArray;
-import org.json.JSONObject;
 
 import com.unboundid.ldap.sdk.SearchResultEntry;
 
 import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.jena.query.Dataset;
+import org.apache.jena.query.QueryExecution;
+import org.apache.jena.query.QueryExecutionFactory;
 import org.apache.jena.query.QuerySolution;
+import org.apache.jena.query.ReadWrite;
 import org.apache.jena.query.ResultSet;
+import org.apache.jena.sparql.JenaTransactionException;
+import org.apache.jena.update.GraphStore;
+import org.apache.jena.update.GraphStoreFactory;
+import org.apache.jena.update.UpdateExecutionFactory;
+import org.apache.jena.update.UpdateFactory;
+import org.apache.jena.update.UpdateProcessor;
+import org.apache.jena.update.UpdateRequest;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StopWatch;
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
+import org.vivoweb.harvester.util.repo.TDBJenaConnect;
 
 import lombok.extern.slf4j.Slf4j;
 import reciter.connect.beans.vivo.PeopleBean;
 import reciter.connect.database.ldap.LDAPConnectionFactory;
 import reciter.connect.database.mysql.MysqlConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
+import reciter.connect.database.tdb.TDBConnectionFactory;
 import reciter.connect.vivo.IngestType;
 import reciter.connect.vivo.api.client.VivoClient;
 
@@ -57,6 +70,9 @@ public class AcademicFetchFromED {
 
 	@Autowired
 	private JenaConnectionFactory jcf;
+
+	@Autowired
+	private TDBConnectionFactory tcf;
 
 	@Autowired
 	private MysqlConnectionFactory mycf;
@@ -115,7 +131,6 @@ public class AcademicFetchFromED {
 		log.info("Number of new people inserted in VIVO: " + count);
 		
 		log.info("Number of people updated in VIVO: " + this.updateCount);
-		
 		stopWatch.stop();
 		log.info("People fetch Time taken: " + stopWatch.getTotalTimeSeconds() + "s");
 		return "People fetch completed successfully for cwids: " + people.toString();
@@ -129,7 +144,7 @@ public class AcademicFetchFromED {
 
 			List<PeopleBean> people = new ArrayList<>();
 			int noCwidCount = 0;
-			String filter = "(&(objectClass=eduPerson)(weillCornellEduPersonTypeCode=academic))";
+			String filter = "(&(objectClass=eduPerson)(weillCornellEduPersonTypeCode=academic)(weillCornellEduCWID=rgcryst))";
 			
 			List<SearchResultEntry> results = lcf.searchWithBaseDN(filter,"ou=people,dc=weill,dc=cornell,dc=edu");
 			
@@ -317,14 +332,23 @@ public class AcademicFetchFromED {
 				}
 			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
 				try {
-					SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+					TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
 					runSparqlUpdateTemplate(sb.toString(), vivoJena);
 					if(vivoJena != null)
-						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+						this.tcf.returnConnectionToPool(vivoJena, "dataSet");
 				} catch(IOException e) {
 					log.error("Error connecting to Jena database", e);
 				}
 			
+			} else {
+				try {
+					TDBJenaConnect vivoJena = this.tcf.createNewDataSetConnectionForPool();
+					runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
+					if(vivoJena != null)
+						vivoJena.getDataset().close();
+				} catch(IOException e) {
+					log.error("Error connecting to Jena database", e);
+				}
 			}
 			insertInferenceTriples(pb);
 		}
@@ -376,8 +400,8 @@ public class AcademicFetchFromED {
 				} catch(Exception  e) {
 					log.info("Api Exception", e);
 				}
-			} else {
-				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
 
 				try{
 					vivoJena.executeUpdateQuery(sb.toString(),true);
@@ -386,7 +410,18 @@ public class AcademicFetchFromED {
 					log.error("Error connecting to Jena Database", e);
 				}
 				if(vivoJena != null)
-					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+					this.tcf.returnConnectionToPool(vivoJena, "dataSet");
+			} else {
+				TDBJenaConnect vivoJena = this.tcf.createNewDataSetConnectionForPool();
+
+				try{
+					runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
+				}
+				catch(IOException e) {
+					log.error("Error connecting to Jena Database", e);
+				}
+				if(vivoJena != null)
+					vivoJena.getDataset().close();
 			}
 		}
 		
@@ -542,16 +577,28 @@ public class AcademicFetchFromED {
 				} catch(Exception e) {
 					log.error("Api Exception", e);
 				}
-			} else {
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
 
-				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+				TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
 				
 				ResultSet rs = runSparqlTemplate(sparqlQuery, vivoJena);
 				
 				QuerySolution qs = rs.nextSolution();
 				count = Integer.parseInt(qs.get("c").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
 				if(vivoJena != null)
-					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+					this.tcf.returnConnectionToPool(vivoJena, "dataSet");
+			} else {
+				TDBJenaConnect vivoJena = this.tcf.createNewDataSetConnectionForPool();
+				try{
+				ResultSet rs = runTDBSparqlTemplate(sparqlQuery, vivoJena);
+				
+				QuerySolution qs = rs.nextSolution();
+				count = Integer.parseInt(qs.get("c").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
+				} catch(JenaTransactionException e) {
+					log.error("TDB Exception with uid: ", e);
+				}
+				if(vivoJena != null)
+					vivoJena.getDataset().close();
 			}
 
 			if(count > 0)
@@ -607,7 +654,7 @@ public class AcademicFetchFromED {
 					"}}";
 			
 			log.debug(sparqlQuery);
-			SDBJenaConnect vivoJena = null;
+			TDBJenaConnect vivoJena = null;
 			try {
 				if(ingestType.equals(IngestType.VIVO_API.toString())) {
 					String response = this.vivoClient.vivoQueryApi(sparqlQuery);
@@ -697,8 +744,8 @@ public class AcademicFetchFromED {
 						}
 					}
 				} else {
-					vivoJena = this.jcf.getConnectionfromPool("dataSet");
-					ResultSet rs = runSparqlTemplate(sparqlQuery, vivoJena);
+					vivoJena = this.tcf.createNewDataSetConnectionForPool();
+					ResultSet rs = runTDBSparqlTemplate(sparqlQuery, vivoJena);
 					QuerySolution qs = null;
 						if(rs.hasNext()) {
 							qs = rs.nextSolution();
@@ -980,7 +1027,7 @@ public class AcademicFetchFromED {
 							
 							
 							
-							runSparqlUpdateTemplate(sb.toString(), vivoJena);
+							runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
 							
 							this.updateCount = this.updateCount + 1;
 						}
@@ -1005,10 +1052,14 @@ public class AcademicFetchFromED {
 			                log.info("Update Query for person type: " + sb.toString());
 							if(ingestType.equals(IngestType.VIVO_API.toString())) {
 								log.info(this.vivoClient.vivoUpdateApi(sb.toString()));
-							} else {
-								SDBJenaConnect vivoJenaInf = this.jcf.getConnectionfromPool("dataSet");
+							} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+								TDBJenaConnect vivoJenaInf = this.tcf.getConnectionfromPool("dataSet");
 								runSparqlUpdateTemplate(sb.toString(), vivoJenaInf);
-								this.jcf.returnConnectionToPool(vivoJenaInf, "dataSet");
+								this.tcf.returnConnectionToPool(vivoJenaInf, "dataSet");
+							} else {
+								TDBJenaConnect vivoJenaInf = this.tcf.createNewDataSetConnectionForPool();
+								runTDBSparqlUpdateTemplate(sb.toString(), vivoJenaInf);
+								vivoJenaInf.getDataset().close();
 							}
 						}
 					}
@@ -1052,14 +1103,16 @@ public class AcademicFetchFromED {
 						if(ingestType.equals(IngestType.VIVO_API.toString())) {
 							log.info("Insert Query: " + sb.toString());
 							log.info(this.vivoClient.vivoUpdateApi(sb.toString()));
-						} else {
+						} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
 							log.info("Insert Query: " + sb.toString());
 		                	runSparqlUpdateTemplate(sb.toString(), vivoJena);
+						} else {
+							runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
 						}
 	                }
-					if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+					if(ingestType.equals(IngestType.TDB_DIRECT.toString())) {
 						if(vivoJena!= null)
-							this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+							vivoJena.getDataset().close();
 					}
 					//Run inferencing on the updated triples
 					insertInferenceTriples(pb);
@@ -1116,15 +1169,24 @@ public class AcademicFetchFromED {
 				} catch(Exception e) {
 					log.error("Api Exception", e);
 				}
-			} else {
-				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
 				try {
 					runSparqlUpdateTemplate(sb.toString(), vivoJena);
 				} catch(IOException e) {
 					log.error("IOException: ",e);
 				}
 				if(vivoJena!= null)
-					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+					this.tcf.returnConnectionToPool(vivoJena, "dataSet");
+			} else {
+				TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
+				try {
+					runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
+				} catch(IOException e) {
+					log.error("IOException: ",e);
+				}
+				if(vivoJena!= null)
+					this.tcf.returnConnectionToPool(vivoJena, "dataSet");
 			}
 		}
 
@@ -1149,14 +1211,14 @@ public class AcademicFetchFromED {
 				sb.append("}");
 				
 				log.info(sb.toString());
-				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+				TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
 				try {
-					runSparqlUpdateTemplate(sb.toString(), vivoJena);
+					runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
 				} catch(IOException e) {
 					log.error("IOException: ",e);
 				}
 				if(vivoJena!= null)
-					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+					this.tcf.returnConnectionToPool(vivoJena, "dataSet");
 			} else {
 				log.info("No external relationships exist for " + pb.getCwid());
 			}
@@ -1222,7 +1284,7 @@ public class AcademicFetchFromED {
 		 * @return ResultSet containing all the results
 		 * @throws IOException default exception thrown
 		 */
-		private ResultSet runSparqlTemplate(String sparqlQuery, SDBJenaConnect vivoJena) throws IOException {
+		private ResultSet runSparqlTemplate(String sparqlQuery, TDBJenaConnect vivoJena) throws IOException {
 			ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery, true);		
 			return rs;
 		}
@@ -1233,7 +1295,38 @@ public class AcademicFetchFromED {
 		 * @return ResultSet containing all the results
 		 * @throws IOException default exception thrown
 		 */
-		private void runSparqlUpdateTemplate(String sparqlQuery, SDBJenaConnect vivoJena) throws IOException {
+		private void runSparqlUpdateTemplate(String sparqlQuery, TDBJenaConnect vivoJena) throws IOException {
 			vivoJena.executeUpdateQuery(sparqlQuery, true);
+		}
+
+		/**
+		 * Template to fit in different JenaConnect queries.
+		 * @param sparqlQuery contains the query
+		 * @param vivoJena connection to SDB jenas
+		 * @throws IOException default exception thrown
+		 */
+		private void runTDBSparqlUpdateTemplate(String sparqlQuery, TDBJenaConnect vivoJena) throws IOException {
+			Dataset ds = vivoJena.getDataset();
+			ds.begin(ReadWrite.WRITE);
+			GraphStore graphStore = GraphStoreFactory.create(ds);
+			UpdateRequest request = UpdateFactory.create(sparqlQuery);
+			UpdateProcessor proc = UpdateExecutionFactory.create(request, graphStore);
+			proc.execute();
+			ds.commit();
+		}
+
+		/**
+		 * Template to fit in different JenaConnect queries.
+		 * @param sparqlQuery contains the query
+		 * @return ResultSet containing all the results
+		 * @throws IOException default exception thrown
+		 */
+		private ResultSet runTDBSparqlTemplate(String sparqlQuery, TDBJenaConnect vivoJena) throws IOException {	
+			Dataset ds = vivoJena.getDataset();
+			ds.begin(ReadWrite.READ);
+			QueryExecution qExec = QueryExecutionFactory.create(sparqlQuery.toString(), ds);
+			ResultSet rs = qExec.execSelect();
+			ds.commit();
+			return rs;
 		}
 }

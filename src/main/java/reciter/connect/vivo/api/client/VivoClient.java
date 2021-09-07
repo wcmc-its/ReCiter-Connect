@@ -45,13 +45,13 @@ public class VivoClient {
 
     public String vivoUpdateApi(String updateQuery) {
         LinkedMultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("email", VivoClient.vivoApiUsername);
-        body.add("password", VivoClient.vivoApiPassword);
+        //body.add("email", VivoClient.vivoApiUsername);
+        //body.add("password", VivoClient.vivoApiPassword);
         body.add("update", updateQuery);
         
          return this.webClient.post()
                     .uri(uriBuilder -> uriBuilder
-                        .path("/api/sparqlUpdate")
+                        .path("/vivo/update")
                     .build())
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .body(BodyInserters.fromFormData(body))
@@ -78,13 +78,13 @@ public class VivoClient {
     public String vivoQueryApi(String query) {
 
         LinkedMultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("email", VivoClient.vivoApiUsername);
-        body.add("password", VivoClient.vivoApiPassword);
+        //body.add("email", VivoClient.vivoApiUsername);
+        //body.add("password", VivoClient.vivoApiPassword);
         body.add("query", query);
         
          return this.webClient.post()
                     .uri(uriBuilder -> uriBuilder
-                        .path("/api/sparqlQuery")
+                        .path("/vivo/query")
                     .build())
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .header("Accept", "application/sparql-results+json")
