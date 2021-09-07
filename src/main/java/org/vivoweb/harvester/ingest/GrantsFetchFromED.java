@@ -1973,8 +1973,9 @@ public class GrantsFetchFromED {
 			PreparedStatement ps = null;
 			java.sql.ResultSet rs = null;
 			List<GrantBean> grant = new ArrayList<GrantBean>();
+			Connection con = null;
 			try {
-			Connection con = MssqlConnectionFactory.getInfoedDataSource().getConnection();//mcf.getInfoEdConnectionfromPool("INFOED");
+			con = MssqlConnectionFactory.getInfoedDataSource().getConnection();//mcf.getInfoEdConnectionfromPool("INFOED");
 			StringBuilder selectQuery = new StringBuilder();
 			
 			selectQuery.append("select distinct v.CWID,v.Account_Number,x.Award_Number,REPLACE(CONVERT(NVARCHAR, begin_date, 106), ' ', '-') as begin_date,REPLACE(CONVERT(NVARCHAR, end_date, 106), ' ', '-') as end_date,replace(replace(replace(z.proj_title,char(13),' '),char(10),' '),'	','') as proj_title, z.unit_name, z.int_unit_code, z.program_type,z.Orig_Sponsor,");
@@ -2055,8 +2056,8 @@ public class GrantsFetchFromED {
 						ps.close();
 					if(rs!=null)
 						rs.close();
-					/*if(con != null)
-						mcf.returnConnectionToPool("INFOED", con);*/
+					if(con != null)
+						con.close();
 				}
 				catch(Exception e) {
 					log.error("Exception",e);
@@ -2147,8 +2148,9 @@ public class GrantsFetchFromED {
 			String deptId = null;
 			java.sql.ResultSet rs = null;
 			Statement st = null;
+			Connection con = null;
 			try {
-			Connection con =  MssqlConnectionFactory.getASMSDataSource().getConnection();//mcf.getAsmsConnectionfromPool("ASMS");
+			con =  MssqlConnectionFactory.getASMSDataSource().getConnection();//mcf.getAsmsConnectionfromPool("ASMS");
 			
 			
 			//log.info("Department Name in ED: " + deptName);
@@ -2198,8 +2200,10 @@ public class GrantsFetchFromED {
 								rs.close();
 							if(st != null)
 								st.close();
-							/*if(con != null)
-								mcf.returnConnectionToPool("ASMS", con);*/
+							if(con != null)
+								con.close();
+
+								
 						} catch(SQLException e) {
 							log.error("Error in closing connections:", e);
 						}

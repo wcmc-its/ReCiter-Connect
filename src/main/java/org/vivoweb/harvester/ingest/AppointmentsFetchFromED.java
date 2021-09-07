@@ -121,9 +121,13 @@ public class AppointmentsFetchFromED {
 			ob.setEdu(edu);
 			ofaData.add(ob);
 		}
-		/*if(this.con!=null) {
-			this.mcf.returnConnectionToPool("ASMS", con);
-		}*/
+		if(this.con!=null) {
+			try {
+				this.con.close();
+			} catch (SQLException e) {
+				log.error("SQLException", e);
+			}
+		}
 		
 		Iterator<OfaBean>  it1 = ofaData.iterator();
 		while(it1.hasNext()) {
