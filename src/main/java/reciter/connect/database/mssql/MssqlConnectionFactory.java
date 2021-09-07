@@ -227,8 +227,8 @@ public class MssqlConnectionFactory {
 		asmsDataSource.setUser(this.username);
 		asmsDataSource.setPassword(this.password);
 		
-		asmsDataSource.setMinPoolSize(50);
-		asmsDataSource.setMaxPoolSize(100);
+		asmsDataSource.setMinPoolSize(100);
+		asmsDataSource.setMaxPoolSize(300);
 		asmsDataSource.setAcquireIncrement(5);
 	}
 
@@ -239,8 +239,8 @@ public class MssqlConnectionFactory {
 		infoedDataSource.setUser(this.infoEdUsername);
 		infoedDataSource.setPassword(this.infoEdPassword);
 		
-		infoedDataSource.setMinPoolSize(50);
-		infoedDataSource.setMaxPoolSize(100);
+		infoedDataSource.setMinPoolSize(100);
+		infoedDataSource.setMaxPoolSize(300);
 		infoedDataSource.setAcquireIncrement(5);
 	}
 
