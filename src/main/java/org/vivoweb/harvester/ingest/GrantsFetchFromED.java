@@ -74,6 +74,9 @@ public class GrantsFetchFromED {
 
 	@Autowired
 	private VivoClient vivoClient;
+
+	private Connection asmsCon = null;
+	private Connection infoEdCon = null;
 	
 	/**
 	 * The default namespace for VIVO
@@ -91,7 +94,9 @@ public class GrantsFetchFromED {
 	 */
 	private String strDate = this.sdf.format(this.now);
 
-	public Callable<String> getCallable(List<String> people) {
+	public Callable<String> getCallable(List<String> people, Connection asmsCon, Connection infoEdCon) {	
+		this.asmsCon = asmsCon;
+		this.infoEdCon = infoEdCon;
         return new Callable<String>() {
             public String call() throws Exception {
                 return execute(people);
@@ -1973,9 +1978,7 @@ public class GrantsFetchFromED {
 			PreparedStatement ps = null;
 			java.sql.ResultSet rs = null;
 			List<GrantBean> grant = new ArrayList<GrantBean>();
-			Connection con = null;
 			try {
-			con = MssqlConnectionFactory.getInfoedDataSource().getConnection();//mcf.getInfoEdConnectionfromPool("INFOED");
 			StringBuilder selectQuery = new StringBuilder();
 			
 			selectQuery.append("select distinct v.CWID,v.Account_Number,x.Award_Number,REPLACE(CONVERT(NVARCHAR, begin_date, 106), ' ', '-') as begin_date,REPLACE(CONVERT(NVARCHAR, end_date, 106), ' ', '-') as end_date,replace(replace(replace(z.proj_title,char(13),' '),char(10),' '),'	','') as proj_title, z.unit_name, z.int_unit_code, z.program_type,z.Orig_Sponsor,");
@@ -1995,7 +1998,7 @@ public class GrantsFetchFromED {
 			
 			
 			
-				ps = con.prepareStatement(selectQuery.toString());
+				ps = this.infoEdCon.prepareStatement(selectQuery.toString());
 				rs = ps.executeQuery();
 				while(rs.next()) {
 					GrantBean gb = new GrantBean();
@@ -2036,7 +2039,7 @@ public class GrantsFetchFromED {
 					if(rs.getString(12) != null)
 						gb.setSponsorCode(rs.getString(12).trim());
 					
-					gb.setContributors(getContributors(gb, gb.getAwardNumber(), con, people));
+					gb.setContributors(getContributors(gb, gb.getAwardNumber(), infoEdCon, people));
 					
 
 					grant.add(gb);
@@ -2056,8 +2059,6 @@ public class GrantsFetchFromED {
 						ps.close();
 					if(rs!=null)
 						rs.close();
-					if(con != null)
-						con.close();
 				}
 				catch(Exception e) {
 					log.error("Exception",e);
@@ -2148,66 +2149,42 @@ public class GrantsFetchFromED {
 			String deptId = null;
 			java.sql.ResultSet rs = null;
 			Statement st = null;
-			Connection con = null;
 			try {
-			con =  MssqlConnectionFactory.getASMSDataSource().getConnection();//mcf.getAsmsConnectionfromPool("ASMS");
-			
-			
-			//log.info("Department Name in ED: " + deptName);
-			
-			/*if(deptName.trim().equals("Medicine")) {
-				deptName ="Joan and Sanford I. Weill Department of Medicine";
-			}
-			
-			if(deptName.trim().equals("Library")) {
-				deptName ="Samuel J. Wood Library";
-			}*/
-			if(deptName.trim().equals("Otolaryngology - Head and Neck Surgery")) {
-				deptName ="Otorlaryngology - Head and Neck Surgery";
-			}
-			
-			if(deptName.trim().equals("Otolaryngology")) {
-				deptName ="Otorlaryngology - Head and Neck Surgery";
-			}
-			
-			/*if(deptName.trim().equals("Integrative Medicine")) {
-				deptName ="Complementary and Integrative Medicine";
-			}*/
-					
-			String selectQuery = "SELECT DISTINCT id FROM wcmc_department where TRIM(title) = '" + deptName.replaceAll("'", "''").trim() + "'";
-			
-			//log.info(selectQuery);
-			
+				if(deptName.trim().equals("Otolaryngology - Head and Neck Surgery")) {
+					deptName ="Otorlaryngology - Head and Neck Surgery";
+				}
 				
-					st = con.createStatement();
-					rs = st.executeQuery(selectQuery);
-					if(rs!=null) { 
-						if(rs.next()){
-							deptId = rs.getString(1).trim();
-						} else {
-							deptId = unitCode;
-							gb.setUnitCodeMissing(true);
-						}
-					}
+				if(deptName.trim().equals("Otolaryngology")) {
+					deptName ="Otorlaryngology - Head and Neck Surgery";
+				}
 						
+				String selectQuery = "SELECT DISTINCT id FROM wcmc_department where TRIM(title) = '" + deptName.replaceAll("'", "''").trim() + "'";
+				st = this.asmsCon.createStatement();
+				rs = st.executeQuery(selectQuery);
+				if(rs!=null) { 
+					if(rs.next()){
+						deptId = rs.getString(1).trim();
+					} else {
+						deptId = unitCode;
+						gb.setUnitCodeMissing(true);
 					}
-					catch(SQLException sqle) {
-						log.error("Exception:", sqle);
+				}
+					
+				}
+				catch(SQLException sqle) {
+					log.error("Exception:", sqle);
+				}
+				finally {
+					try {
+						if(rs != null)
+							rs.close();
+						if(st != null)
+							st.close();
+							
+					} catch(SQLException e) {
+						log.error("Error in closing connections:", e);
 					}
-					finally {
-						try {
-							if(rs != null)
-								rs.close();
-							if(st != null)
-								st.close();
-							if(con != null)
-								con.close();
-
-								
-						} catch(SQLException e) {
-							log.error("Error in closing connections:", e);
-						}
-					}
+				}
 				
 			return deptId;
 					

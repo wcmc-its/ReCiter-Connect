@@ -89,7 +89,8 @@ public class AppointmentsFetchFromED {
 	@Autowired
 	private MssqlConnectionFactory mcf; 
 
-	public Callable<String> getCallable(List<String> people) {
+	public Callable<String> getCallable(List<String> people, Connection asmsCon) {
+		this.con = asmsCon;
         return new Callable<String>() {
             public String call() throws Exception {
                 return execute(people);
@@ -108,11 +109,6 @@ public class AppointmentsFetchFromED {
 		int updateCount = 0;
 		List<OfaBean> ofaData = new ArrayList<>();
 		//Initialize connection pool and fill it with connection
-		try {
-			this.con = MssqlConnectionFactory.getASMSDataSource().getConnection();
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}//this.mcf.getAsmsConnectionfromPool("ASMS");
 		Iterator<String> it = people.iterator();
 		while(it.hasNext()) {
 			String cwid = it.next();
@@ -120,13 +116,6 @@ public class AppointmentsFetchFromED {
 			ArrayList<EducationBean> edu = getEducationAndTraining(ob.getCwid()); //Get all the education and training data from OFA
 			ob.setEdu(edu);
 			ofaData.add(ob);
-		}
-		if(this.con!=null) {
-			try {
-				this.con.close();
-			} catch (SQLException e) {
-				log.error("SQLException", e);
-			}
 		}
 		
 		Iterator<OfaBean>  it1 = ofaData.iterator();

@@ -120,6 +120,14 @@ public class Application implements ApplicationRunner {
         DeleteProfile deleteProfile = context.getBean(DeleteProfile.class);
         mssqlConnectionFactory.createC3PODatasourceForASMS();
         mssqlConnectionFactory.createC3PODatasourceForInfoEd();
+        Connection asmsCon = null;
+        Connection infoEdCon = null;
+        try {
+            asmsCon = MssqlConnectionFactory.getASMSDataSource().getConnection();
+            infoEdCon = MssqlConnectionFactory.getInfoedDataSource().getConnection();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
 
         //academicFetchFromED.getCOIData();
 
@@ -161,8 +169,8 @@ public class Application implements ApplicationRunner {
                 List<String> subsetPeoples = subSetsIteratorPeopleCwids.next();
                 List<Callable<String>> callables = new ArrayList<>();
                 for(String cwid: subsetPeoples) {
-                    callables.add(appointmentsFetchFromED.getCallable(Arrays.asList(cwid)));
-                    callables.add(grantsFetchFromED.getCallable(Arrays.asList(cwid)));
+                    callables.add(appointmentsFetchFromED.getCallable(Arrays.asList(cwid), asmsCon));
+                    callables.add(grantsFetchFromED.getCallable(Arrays.asList(cwid), asmsCon, infoEdCon));
                 }
                 log.info("Appointment and Grants fetch will run for " + subsetPeoples.toString());
                 try {
@@ -189,8 +197,14 @@ public class Application implements ApplicationRunner {
             if (mysqlConnectionFactory != null)
                 mysqlConnectionFactory.destroyConnectionPool();
 
-            /*if (mssqlConnectionFactory != null)
-                mssqlConnectionFactory.destroyConnectionPool();*/
+            if(asmsCon != null && infoEdCon != null) {
+                try {
+                    asmsCon.close();
+                    infoEdCon.close();
+                } catch (SQLException e) {
+                    log.error("SQLException", e);
+                }
+            }
 
             MssqlConnectionFactory.dataSourceCleanup(MssqlConnectionFactory.getASMSDataSource());
             MssqlConnectionFactory.dataSourceCleanup(MssqlConnectionFactory.getInfoedDataSource());
