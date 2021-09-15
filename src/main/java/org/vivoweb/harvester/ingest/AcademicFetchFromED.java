@@ -122,7 +122,7 @@ public class AcademicFetchFromED {
 			else {
 				log.info("Person: "+pb.getCwid() + " already exist in VIVO");
 				checkForUpdates(pb);
-				//syncCOIData(pb);
+				syncCOIData(pb);
 				//syncPersonTypes(pb);
 			}
 			log.info("################################ End of " + pb.getCwid() + " - " + pb.getDisplayName() + " -  Insert/Update Operation ###################");
@@ -279,9 +279,9 @@ public class AcademicFetchFromED {
 			for(String nsType: pb.getNsTypes()) {
 				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> rdf:type " + nsType + " . \n");
 			}
-			/*if(this.vivoCoiMap.containsKey(pb.getCwid())) {
+			if(this.vivoCoiMap.containsKey(pb.getCwid())) {
 				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> \"" + this.vivoCoiMap.get(pb.getCwid()) + "\" . \n");
-			}*/
+			}
 			sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:personLabel \"" + pb.getDisplayName().trim() + "\" . \n");
 			sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:cwid \"" + pb.getCwid().trim() + "\" . \n");
 			sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> rdfs:label \"" + lastMiddleFirst + "\" . \n");
@@ -1211,14 +1211,22 @@ public class AcademicFetchFromED {
 				sb.append("}");
 				
 				log.info(sb.toString());
-				TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
-				try {
-					runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
-				} catch(IOException e) {
-					log.error("IOException: ",e);
+				if(ingestType.equals(IngestType.VIVO_API.toString())) {
+					try {
+						log.info(this.vivoClient.vivoUpdateApi(sb.toString()));
+					} catch(Exception e) {
+						log.error("Api Exception", e);
+					}
+				} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+					TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
+					try {
+						runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
+					} catch(IOException e) {
+						log.error("IOException: ",e);
+					}
+					if(vivoJena!= null)
+						this.tcf.returnConnectionToPool(vivoJena, "dataSet");
 				}
-				if(vivoJena!= null)
-					this.tcf.returnConnectionToPool(vivoJena, "dataSet");
 			} else {
 				log.info("No external relationships exist for " + pb.getCwid());
 			}

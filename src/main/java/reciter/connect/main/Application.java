@@ -129,7 +129,7 @@ public class Application implements ApplicationRunner {
 			e.printStackTrace();
 		}
 
-        //academicFetchFromED.getCOIData();
+        academicFetchFromED.getCOIData();
 
         ExecutorService executor = Executors.newFixedThreadPool(25);
 
