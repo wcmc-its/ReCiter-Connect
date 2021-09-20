@@ -1,8 +1,6 @@
 package reciter.connect.main;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -30,6 +28,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import org.springframework.retry.annotation.EnableRetry;
 import org.springframework.util.StopWatch;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -51,12 +50,12 @@ import reciter.connect.database.ldap.LDAPConnectionFactory;
 import reciter.connect.database.mssql.MssqlConnectionFactory;
 import reciter.connect.database.mysql.MysqlConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
-import reciter.connect.database.tdb.TDBConnectionFactory;
 import reciter.connect.vivo.api.client.VivoClient;
 import reciter.connect.vivo.sdb.publications.service.VivoPublicationsService;
 
 @SpringBootApplication
 @PropertySource("classpath:application.properties")
+@EnableRetry
 @ComponentScan({ "reciter.connect", "org.vivoweb.harvester" })
 @Slf4j
 public class Application implements ApplicationRunner {
@@ -73,12 +72,6 @@ public class Application implements ApplicationRunner {
 
     @Autowired
     private VivoPublicationsService vivoPublicationsService;
-
-    @Autowired
-    private VivoClient vivoClient;
-
-    @Autowired
-    private EdDataInterface edDataInterface;
 
     @Bean
     public WebClient getWebClient() {
@@ -129,7 +122,7 @@ public class Application implements ApplicationRunner {
 			e.printStackTrace();
 		}
 
-        academicFetchFromED.getCOIData();
+        //academicFetchFromED.getCOIData();
 
         ExecutorService executor = Executors.newFixedThreadPool(25);
 
@@ -161,6 +154,7 @@ public class Application implements ApplicationRunner {
                 }
                 callables.clear();
             }
+
             List<String> peopleCwids = people.stream().map(PeopleBean::getCwid).collect(Collectors.toList());
             
             List<List<String>> peopleCwidsSubSets = Lists.partition(peopleCwids, 5);

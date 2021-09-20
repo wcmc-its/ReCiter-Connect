@@ -4,6 +4,8 @@ import javax.net.ssl.SSLException;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import org.springframework.retry.annotation.Retryable;
+import org.springframework.retry.annotation.Backoff;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
@@ -35,7 +37,7 @@ public class VivoClient {
             HttpClient httpClient = HttpClient.create().secure(t -> t.sslContext(sslContext));
             this.webClient = webClientBuilder
                     .clientConnector(new ReactorClientHttpConnector(httpClient))
-                    .filter(VivoClient.errorHandlingFilter())
+                    //.filter(VivoClient.errorHandlingFilter())
                     .baseUrl(VivoClient.vivoBaseUrl)
                     .build();
         } catch (SSLException e) {
@@ -43,6 +45,8 @@ public class VivoClient {
         }
     }
 
+    @Retryable(maxAttempts = 5, value = RuntimeException.class, 
+        backoff = @Backoff(random = true, delay = 2000, maxDelay = 15000), listeners = {"retryListener"})
     public String vivoUpdateApi(String updateQuery) {
         LinkedMultiValueMap<String, String> body = new LinkedMultiValueMap<>();
         //body.add("email", VivoClient.vivoApiUsername);
@@ -55,8 +59,18 @@ public class VivoClient {
                     .build())
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .body(BodyInserters.fromFormData(body))
-                    .exchange()
-                    .flatMap(response -> response.toEntity(String.class))
+                    .exchangeToMono(response -> {
+                        if (response.statusCode() != null && (response.statusCode().is5xxServerError() || response.statusCode().is4xxClientError())) {
+                            return response.bodyToMono(String.class)
+                                    .flatMap(errorBody -> {
+                                        return Mono.error(new CustomWebClientResponseException(errorBody,response.statusCode()));
+                                        });
+                        }
+                        else {
+                            return response.toEntity(String.class);
+                        }
+                    })
+                    //.flatMap(response -> response.toEntity(String.class))
                     .block()
                     .getBody();
     }
@@ -74,7 +88,8 @@ public class VivoClient {
         });
     }
 
-
+    @Retryable(maxAttempts = 5, value = RuntimeException.class, 
+        backoff = @Backoff(random = true, delay = 2000, maxDelay = 15000), listeners = {"retryListener"})
     public String vivoQueryApi(String query) {
 
         LinkedMultiValueMap<String, String> body = new LinkedMultiValueMap<>();
@@ -89,8 +104,18 @@ public class VivoClient {
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .header("Accept", "application/sparql-results+json")
                     .body(BodyInserters.fromFormData(body))
-                    .exchange()
-                    .flatMap(response -> response.toEntity(String.class))
+                    .exchangeToMono(response -> {
+                        if (response.statusCode() != null && (response.statusCode().is5xxServerError() || response.statusCode().is4xxClientError())) {
+                            return response.bodyToMono(String.class)
+                                    .flatMap(errorBody -> {
+                                        return Mono.error(new CustomWebClientResponseException(errorBody,response.statusCode()));
+                                        });
+                        }
+                        else {
+                            return response.toEntity(String.class);
+                        }
+                    })
+                    //.flatMap(response -> response.toEntity(String.class))
                     .block()
                     .getBody();
     }
