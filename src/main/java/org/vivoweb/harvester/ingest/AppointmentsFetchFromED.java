@@ -813,7 +813,7 @@ public class AppointmentsFetchFromED {
 			//For education and background
 			if(ob.getEdu() != null && !ob.getEdu().isEmpty()) {
 				for(EducationBean edu:ob.getEdu()) {
-					if(edu.getCrudStatus().equals("INSERT")) {
+					if(edu.getCrudStatus() != null && edu.getCrudStatus().equals("INSERT")) {
 						sb.append("<" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> obo:RO_0000056 <" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> . \n");
 						sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> core:relates <" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> . \n");
 						sb.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
@@ -821,7 +821,7 @@ public class AppointmentsFetchFromED {
 						sb.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> vitro:mostSpecificType <http://vivoweb.org/ontology/core#AcademicDegree> . \n");
 						insertCount = insertCount + 1;
 					}
-					if(edu.getCrudStatus().equals("UPDATE")) {
+					if(edu.getCrudStatus() != null && edu.getCrudStatus().equals("UPDATE")) {
 						sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> obo:RO_0000056 <" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> . \n");
 						sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> rdf:type obo:BFO_0000004 . \n");
 						sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> rdf:type obo:BFO_0000001 . \n");
