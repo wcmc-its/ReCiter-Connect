@@ -26,9 +26,12 @@ import reciter.connect.beans.vivo.*;
 import reciter.connect.database.ldap.LDAPConnectionFactory;
 import reciter.connect.database.mssql.MssqlConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
+import reciter.connect.database.tdb.TDBConnectionFactory;
+import reciter.connect.vivo.IngestType;
 import reciter.connect.vivo.api.client.VivoClient;
 
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
+import org.vivoweb.harvester.util.repo.TDBJenaConnect;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -63,12 +66,22 @@ public class AppointmentsFetchFromED {
 	private JenaConnectionFactory jcf;
 
 	@Autowired
+	private TDBConnectionFactory tcf;
+
+	@Autowired
 	private VivoClient vivoClient;
+
+	private String ingestType = System.getenv("INGEST_TYPE");
+
+	SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 	
 	/**
 	 * The default namespace for VIVO
 	 */
-	private String vivoNamespace = JenaConnectionFactory.nameSpace;
+	private String vivoNamespace = TDBConnectionFactory.nameSpace;
+
+	private String currYear = new SimpleDateFormat("yyyy").format(new Date());
+
 	
 	/**
 	 * Mssql connection factory object for all the mysql related connections
@@ -76,7 +89,8 @@ public class AppointmentsFetchFromED {
 	@Autowired
 	private MssqlConnectionFactory mcf; 
 
-	public Callable<String> getCallable(List<String> people) {
+	public Callable<String> getCallable(List<String> people, Connection asmsCon) {
+		this.con = asmsCon;
         return new Callable<String>() {
             public String call() throws Exception {
                 return execute(people);
@@ -95,7 +109,6 @@ public class AppointmentsFetchFromED {
 		int updateCount = 0;
 		List<OfaBean> ofaData = new ArrayList<>();
 		//Initialize connection pool and fill it with connection
-		this.con = this.mcf.getAsmsConnectionfromPool("ASMS");
 		Iterator<String> it = people.iterator();
 		while(it.hasNext()) {
 			String cwid = it.next();
@@ -103,10 +116,6 @@ public class AppointmentsFetchFromED {
 			ArrayList<EducationBean> edu = getEducationAndTraining(ob.getCwid()); //Get all the education and training data from OFA
 			ob.setEdu(edu);
 			ofaData.add(ob);
-		}
-		
-		if(this.con!=null) {
-			this.mcf.returnConnectionToPool("ASMS", con);
 		}
 		
 		Iterator<OfaBean>  it1 = ofaData.iterator();
@@ -121,7 +130,11 @@ public class AppointmentsFetchFromED {
 			}
 			else {
 				log.info("Checking for any updates for "+ob1.getCwid());
-				updateCount = checkForUpdates(ob1, ob1.getCwid());
+				if(ingestType.equals(IngestType.VIVO_API.toString())) {
+					updateCount = checkForUpdatesUsingTDB(ob1, ob1.getCwid());
+				} else {
+					updateCount = checkForUpdates(ob1, ob1.getCwid());
+				}
 				
 			}
 			log.info("#########################################################");
@@ -751,14 +764,31 @@ public class AppointmentsFetchFromED {
 			
 			
 			//log.info(sb.toString());
-			
-			try {
-				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
-				runSparqlUpdateTemplate(sb.toString(), vivoJena);
-				if(vivoJena != null)
-					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
-			} catch(IOException e) {
-				log.error("Exception in connecting to Jena" ,e);
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				try{
+					String response = this.vivoClient.vivoUpdateApi(sb.toString());
+					log.info(response);
+				} catch(Exception  e) {
+					log.info("Api Exception", e);
+				}
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				try {
+					SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+					runSparqlUpdateTemplate(sb.toString(), vivoJena);
+					if(vivoJena != null)
+						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+				} catch(IOException e) {
+					log.error("Exception in connecting to Jena" ,e);
+				}
+			} else {
+				try {
+					TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
+					runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
+					if(vivoJena != null)
+						this.tcf.returnConnectionToPool(vivoJena, "dataSet");
+				} catch(IOException e) {
+					log.error("Exception in connecting to Jena" ,e);
+				}
 			}
 			
 			insertInferenceTriples(ob);
@@ -781,57 +811,79 @@ public class AppointmentsFetchFromED {
 			sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
 			sb.append("INSERT DATA { GRAPH <http://vitro.mannlib.cornell.edu/default/vitro-kb-inf> { \n");
 			//For education and background
-			for(EducationBean edu:ob.getEdu()) {
-				if(edu.getCrudStatus().equals("INSERT")) {
-					sb.append("<" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> obo:RO_0000056 <" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> . \n");
-					sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> core:relates <" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> . \n");
-					sb.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
-					sb.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> rdf:type <http://www.w3.org/2004/02/skos/core#Concept> . \n");
-					sb.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> vitro:mostSpecificType <http://vivoweb.org/ontology/core#AcademicDegree> . \n");
-					insertCount = insertCount + 1;
-				}
-				if(edu.getCrudStatus().equals("UPDATE")) {
-					sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> obo:RO_0000056 <" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> . \n");
-					sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> rdf:type obo:BFO_0000004 . \n");
-					sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> rdf:type obo:BFO_0000001 . \n");
-					sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> rdf:type obo:BFO_0000002 . \n");
-					sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> rdf:type <http://xmlns.com/foaf/0.1/Organization> . \n");
-					sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
-					sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> rdf:type <http://xmlns.com/foaf/0.1/Agent> . \n");
+			if(ob.getEdu() != null && !ob.getEdu().isEmpty()) {
+				for(EducationBean edu:ob.getEdu()) {
+					if(edu.getCrudStatus() != null && edu.getCrudStatus().equals("INSERT")) {
+						sb.append("<" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> obo:RO_0000056 <" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> . \n");
+						sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> core:relates <" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> . \n");
+						sb.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+						sb.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> rdf:type <http://www.w3.org/2004/02/skos/core#Concept> . \n");
+						sb.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> vitro:mostSpecificType <http://vivoweb.org/ontology/core#AcademicDegree> . \n");
+						insertCount = insertCount + 1;
+					}
+					if(edu.getCrudStatus() != null && edu.getCrudStatus().equals("UPDATE")) {
+						sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> obo:RO_0000056 <" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> . \n");
+						sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> rdf:type obo:BFO_0000004 . \n");
+						sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> rdf:type obo:BFO_0000001 . \n");
+						sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> rdf:type obo:BFO_0000002 . \n");
+						sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> rdf:type <http://xmlns.com/foaf/0.1/Organization> . \n");
+						sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+						sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> rdf:type <http://xmlns.com/foaf/0.1/Agent> . \n");
+					}
 				}
 			}
 			//For roles
-			for(RoleBean rb: ob.getRoles()) {
-				if(rb.getCrudStatus() != null && rb.getCrudStatus().equals("INSERT")) {
-					sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() +"> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
-					sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() +"> vitro:mostSpecificType core:Position . \n");
-					sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> core:contributingRole <" + this.vivoNamespace + "position-" + rb.getSorId().trim() +"> . \n");
-					sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type obo:BFO_0000004 . \n");
-					sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type obo:BFO_0000001 . \n");
-					sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type obo:BFO_0000002 . \n");
-					sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type <http://xmlns.com/foaf/0.1/Organization> . \n");
-					sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
-					sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type <http://xmlns.com/foaf/0.1/Agent> . \n");
-					sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> vitro:mostSpecificType core:AcademicDepartment . \n");
-					sb.append("<" + this.vivoNamespace + "org-568" + rb.getDeptCode() + "> rdf:type obo:BFO_0000004 . \n");
-					sb.append("<" + this.vivoNamespace + "org-568" + rb.getDeptCode() + "> rdf:type obo:BFO_0000001 . \n");
-					sb.append("<" + this.vivoNamespace + "org-568" + rb.getDeptCode() + "> rdf:type obo:BFO_0000002 . \n");
-					sb.append("<" + this.vivoNamespace + "org-568" + rb.getDeptCode() + "> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
-					sb.append("<" + this.vivoNamespace + "org-568" + rb.getDeptCode() + "> rdf:type <http://xmlns.com/foaf/0.1/Agent> . \n");
-					sb.append("<" + this.vivoNamespace + "org-568" + rb.getDeptCode() + "> vitro:mostSpecificType core:University . \n");
-					insertCount = insertCount + 1;
+			if(ob.getRoles() != null && !ob.getRoles().isEmpty()) {
+				for(RoleBean rb: ob.getRoles()) {
+					if(rb.getCrudStatus() != null && rb.getCrudStatus().equals("INSERT")) {
+						sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() +"> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+						sb.append("<" + this.vivoNamespace + "position-" + rb.getSorId().trim() +"> vitro:mostSpecificType core:Position . \n");
+						sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> core:contributingRole <" + this.vivoNamespace + "position-" + rb.getSorId().trim() +"> . \n");
+						sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type obo:BFO_0000004 . \n");
+						sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type obo:BFO_0000001 . \n");
+						sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type obo:BFO_0000002 . \n");
+						sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type <http://xmlns.com/foaf/0.1/Organization> . \n");
+						sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+						sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> rdf:type <http://xmlns.com/foaf/0.1/Agent> . \n");
+						sb.append("<" + this.vivoNamespace + "org-u" + rb.getDeptCode() + "> vitro:mostSpecificType core:AcademicDepartment . \n");
+						sb.append("<" + this.vivoNamespace + "org-568" + rb.getDeptCode() + "> rdf:type obo:BFO_0000004 . \n");
+						sb.append("<" + this.vivoNamespace + "org-568" + rb.getDeptCode() + "> rdf:type obo:BFO_0000001 . \n");
+						sb.append("<" + this.vivoNamespace + "org-568" + rb.getDeptCode() + "> rdf:type obo:BFO_0000002 . \n");
+						sb.append("<" + this.vivoNamespace + "org-568" + rb.getDeptCode() + "> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+						sb.append("<" + this.vivoNamespace + "org-568" + rb.getDeptCode() + "> rdf:type <http://xmlns.com/foaf/0.1/Agent> . \n");
+						sb.append("<" + this.vivoNamespace + "org-568" + rb.getDeptCode() + "> vitro:mostSpecificType core:University . \n");
+						insertCount = insertCount + 1;
+					}
 				}
 			}
 			sb.append("}}");
 			if(insertCount > 0 ) {
 				log.info("Inserting inference triples for " + ob.getCwid());
-				try {
-					SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
-					runSparqlUpdateTemplate(sb.toString(), vivoJena);
-					if(vivoJena != null)
-						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
-				} catch(IOException e) {
-					log.error("Exception in connecting to Jena" ,e);
+				if(ingestType.equals(IngestType.VIVO_API.toString())) {
+					try{
+						String response = this.vivoClient.vivoUpdateApi(sb.toString());
+						log.info(response);
+					} catch(Exception  e) {
+						log.info("Api Exception", e);
+					}
+				} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+					try {
+						SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+						runSparqlUpdateTemplate(sb.toString(), vivoJena);
+						if(vivoJena != null)
+							this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+					} catch(IOException e) {
+						log.error("Exception in connecting to Jena" ,e);
+					}
+				} else {
+					try {
+						TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
+						runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
+						if(vivoJena != null)
+							this.tcf.returnConnectionToPool(vivoJena, "dataSet");
+					} catch(IOException e) {
+						log.error("Exception in connecting to Jena" ,e);
+					}
 				}
 			}
 			else
@@ -866,9 +918,9 @@ public class AppointmentsFetchFromED {
 				sb.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> <http://vivoweb.org/ontology/core#dateTimeInterval> ?obj . \n");
 				sb.append("}}");
 				
-				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+				TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
 				
-				ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
+				ResultSet rs = runTDBSparqlTemplate(sb.toString(), vivoJena);
 				
 				
 				if(!rs.hasNext()) {
@@ -951,7 +1003,7 @@ public class AppointmentsFetchFromED {
 						
 						try {
 							
-							runSparqlUpdateTemplate(insertQuery.toString(), vivoJena);
+							runTDBSparqlUpdateTemplate(insertQuery.toString(), vivoJena);
 							
 							
 						} catch(IOException e) {
@@ -1003,7 +1055,7 @@ public class AppointmentsFetchFromED {
 						
 						try {
 							
-							runSparqlUpdateTemplate(updateQuery.toString(), vivoJena);
+							runTDBSparqlUpdateTemplate(updateQuery.toString(), vivoJena);
 							
 						} catch(IOException e) {
 							// TODO Auto-generated catch block
@@ -1044,7 +1096,7 @@ public class AppointmentsFetchFromED {
 						
 						try {
 							
-							runSparqlUpdateTemplate(updateQuery.toString(), vivoJena);
+							runTDBSparqlUpdateTemplate(updateQuery.toString(), vivoJena);
 							
 						} catch(IOException e) {
 							// TODO Auto-generated catch block
@@ -1073,7 +1125,7 @@ public class AppointmentsFetchFromED {
 						
 						try {
 							
-							runSparqlUpdateTemplate(updateQuery.toString(), vivoJena);
+							runTDBSparqlUpdateTemplate(updateQuery.toString(), vivoJena);
 							
 						} catch(IOException e) {
 							log.error("IOException" ,e);
@@ -1086,7 +1138,7 @@ public class AppointmentsFetchFromED {
 				}
 				//Close the connection
 				if(vivoJena != null)
-					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+					this.tcf.returnConnectionToPool(vivoJena, "dataSet");
 			}
 			//Checking for education and training updates
 			for(EducationBean edu: ebean) {
@@ -1101,9 +1153,9 @@ public class AppointmentsFetchFromED {
 				
 				//log.info(sb.toString());
 				
-				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+				TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
 				
-				ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
+				ResultSet rs = runTDBSparqlTemplate(sb.toString(), vivoJena);
 				
 				
 				if(rs != null && !rs.hasNext()) {
@@ -1156,7 +1208,7 @@ public class AppointmentsFetchFromED {
 					
 					try {
 						
-						runSparqlUpdateTemplate(insertQuery.toString(), vivoJena);
+						runTDBSparqlUpdateTemplate(insertQuery.toString(), vivoJena);
 						
 					} catch(IOException e) {
 						// TODO Auto-generated catch block
@@ -1182,7 +1234,7 @@ public class AppointmentsFetchFromED {
 					sb.append("?instituteFk rdfs:label ?institutionLabel . ");
 					sb.append("}}");
 					
-					rs = runSparqlTemplate(sb.toString(), vivoJena);
+					rs = runTDBSparqlTemplate(sb.toString(), vivoJena);
 					
 					if(rs.hasNext()) {
 						QuerySolution qs = rs.nextSolution();
@@ -1218,7 +1270,7 @@ public class AppointmentsFetchFromED {
 						
 						//log.info(sb.toString());
 						try {
-							runSparqlUpdateTemplate(sb.toString(), vivoJena);
+							runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
 						} catch(IOException e) {
 							log.error("IOException" ,e);
 						}
@@ -1247,7 +1299,7 @@ public class AppointmentsFetchFromED {
 						
 						//log.info(sb.toString());
 						try {
-							runSparqlUpdateTemplate(sb.toString(), vivoJena);
+							runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
 						} catch(IOException e) {
 							log.error("IOException" ,e);
 						}
@@ -1257,7 +1309,7 @@ public class AppointmentsFetchFromED {
 				}
 				//Close the connection
 				if(vivoJena != null)
-					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+					this.tcf.returnConnectionToPool(vivoJena, "dataSet");
 				
 			}
 			
@@ -1265,6 +1317,358 @@ public class AppointmentsFetchFromED {
 			insertInferenceTriples(ob);
 			//Check if any appointment needs to be deleted in VIVO
 			syncAppointmentsInVivo(rb, cwid);
+			
+			return updateCount;
+			
+		}
+
+		/**
+		 * This function check for updates against existing data in VIVO. If there is any change in data such as end date for a position, a new position, addition of education and training.
+		 * The data is automatically updated and inferenced.
+		 * @param ob The bean object containing role and education & training data both
+		 * @param cwid The unqiue identifier for a person
+		 * @return Update count
+		 * @throws IOException thrown by SDBJenaConnect
+		 */
+		private int checkForUpdatesUsingTDB(OfaBean ob, String cwid) throws IOException {
+			Date now = new Date();
+			String strDate = sdf.format(now);
+			int updateCount = 0;
+			
+			ArrayList<RoleBean> rb = ob.getRoles();
+			ArrayList<EducationBean> ebean = ob.getEdu();
+			
+
+			//Checking for appointment updates
+			for(RoleBean role: rb) {
+				StringBuffer sb = new StringBuffer();
+				sb.append("SELECT ?obj \n");
+				sb.append("WHERE {\n");
+				sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> { \n");
+				sb.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> <http://vivoweb.org/ontology/core#dateTimeInterval> ?obj . \n");
+				sb.append("}}");
+
+				try {
+					String response = this.vivoClient.vivoQueryApi(sb.toString());
+					log.info(response);
+					JSONObject obj = new JSONObject(response);
+					JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+				if(bindings.isEmpty()) {
+					if(!role.isInterimAppointment()) {
+						//insert
+						log.info("Insert new appointment - position-" + role.getSorId().trim());
+						
+						role.setCrudStatus("INSERT");
+						StringBuffer insertQuery = new StringBuffer();
+						insertQuery.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
+						insertQuery.append("PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n");
+						insertQuery.append("PREFIX vivo: <http://vivoweb.org/ontology/core#> \n");
+						insertQuery.append("PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n");
+						insertQuery.append("PREFIX obo: <http://purl.obolibrary.org/obo/> \n");
+						insertQuery.append("PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n");
+						insertQuery.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
+						insertQuery.append("INSERT DATA { GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> { \n");
+						insertQuery.append("<" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> core:relatedBy <" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> . \n");
+						if(role.isPrimaryAppointment())
+							insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> rdf:type core:PrimaryPosition . \n");
+							
+						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> rdf:type core:Position . \n");
+						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> rdf:type core:Relationship . \n");
+						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> rdf:type obo:BFO_0000002 . \n");
+						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> rdf:type obo:BFO_0000001 . \n");
+						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> rdf:type obo:BFO_0000020 . \n");
+						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> rdfs:label \"" + role.getTitleCode().trim() + "\" . \n");
+						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> . \n");
+						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:relates <" + this.vivoNamespace + "org-u" + role.getDeptCode() + "> . \n");
+						insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:DateTimeValue \"" + strDate + "\" . \n");
+						insertQuery.append("<" + this.vivoNamespace + "org-u" + role.getDeptCode() + "> core:relatedBy <" + this.vivoNamespace + "position-" + role.getSorId().trim() +"> . \n");
+						insertQuery.append("<" + this.vivoNamespace + "org-u" + role.getDeptCode() + "> rdf:type core:AcademicDepartment . \n");
+						insertQuery.append("<" + this.vivoNamespace + "org-u" + role.getDeptCode() + "> vitro:mostSpecificType core:AcademicDepartment . \n");
+						insertQuery.append("<" + this.vivoNamespace + "org-u" + role.getDeptCode() + "> rdf:type core:Department . \n");
+						insertQuery.append("<" + this.vivoNamespace + "org-u" + role.getDeptCode() + "> rdfs:label \"" + role.getDepartment() + "\" . \n");
+						insertQuery.append("<" + this.vivoNamespace + "org-u" + role.getDeptCode() + "> <http://purl.obolibrary.org/obo/BFO_0000050> <http://vivo.med.cornell.edu/individual/org-568> . \n");
+						insertQuery.append("<http://vivo.med.cornell.edu/individual/org-568> rdf:type core:University . \n");
+						insertQuery.append("<http://vivo.med.cornell.edu/individual/org-568> rdfs:label \"Weill Cornell Medical College\" . \n");
+						insertQuery.append("<http://vivo.med.cornell.edu/individual/org-568> <http://purl.obolibrary.org/obo/BFO_0000051> <" + this.vivoNamespace + "org-u" + role.getDeptCode() + "> . \n");
+							//if there is end date 
+							if(role.getEndDate() != null && !role.getEndDate().equals("CURRENT")) {
+								//For Date Time Interval
+								insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> . \n");
+								insertQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
+								insertQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> . \n");
+								insertQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-" + role.getEndDate().trim() + "> . \n");
+								insertQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> vitro:mostSpecificType core:DateTimeInterval . \n");
+								insertQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+									//For Start Date
+								insertQuery.append("<" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> rdf:type core:DateTimeValue . \n");
+								insertQuery.append("<" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								insertQuery.append("<" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> core:dateTime \"" + role.getStartDate().trim() + "\" .\n");
+								insertQuery.append("<" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> core:dateTime \"" + role.getStartDate().trim() + "-01-01T00:00:00\" .\n");
+								insertQuery.append("<" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> vitro:mostSpecificType core:DateTimeValue . \n");
+								insertQuery.append("<" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+									//For End Date
+								insertQuery.append("<" + this.vivoNamespace + "date-" + role.getEndDate().trim() + "> rdf:type core:DateTimeValue . \n");
+								insertQuery.append("<" + this.vivoNamespace + "date-" + role.getEndDate().trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								insertQuery.append("<" + this.vivoNamespace + "date-" + role.getEndDate().trim() + "> core:dateTime \"" + role.getEndDate().trim() + "\" .\n");
+								insertQuery.append("<" + this.vivoNamespace + "date-" + role.getEndDate().trim() + "> core:dateTime \"" + role.getEndDate().trim() + "-01-01T00:00:00\" .\n");
+								insertQuery.append("<" + this.vivoNamespace + "date-" + role.getEndDate().trim() + "> vitro:mostSpecificType core:DateTimeValue . \n");
+								insertQuery.append("<" + this.vivoNamespace + "date-" + role.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
+							//if there is no end date
+							else {
+								insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> . \n");
+								insertQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> rdf:type core:DateTimeInterval . \n");
+								insertQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> core:start <" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> . \n");
+								insertQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> vitro:mostSpecificType core:DateTimeInterval . \n");
+								insertQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+								insertQuery.append("<" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> rdf:type core:DateTimeValue . \n");
+								insertQuery.append("<" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+								insertQuery.append("<" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> core:dateTime \"" + role.getStartDate().trim() + "\" .\n");
+								insertQuery.append("<" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> core:dateTime \"" + role.getStartDate().trim() + "-01-01T00:00:00\" .\n");
+								insertQuery.append("<" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> vitro:mostSpecificType core:DateTimeValue . \n");
+								insertQuery.append("<" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
+							insertQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+						insertQuery.append("}}");
+						response = this.vivoClient.vivoUpdateApi(insertQuery.toString());
+						log.info(response);
+					}
+				}
+				
+				else
+				{
+					String endDate = bindings.getJSONObject(0).optJSONObject("obj").getString("value").replace(this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to", "");
+					String dateTimeInterval = bindings.getJSONObject(0).optJSONObject("obj").getString("value");
+					role.setCrudStatus("UPDATE");
+					
+					//Update an appoinment to have an end date
+					if(endDate.length() == 0 && role.getEndDate() != null && !role.getEndDate().equals("CURRENT")) {
+						log.info("Update existing appointment position-" + role.getSorId().trim());
+						StringBuffer updateQuery = new StringBuffer();
+						updateQuery.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
+						updateQuery.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n"); 
+						updateQuery.append("PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n");
+						updateQuery.append("WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");
+						updateQuery.append("DELETE { \n");
+						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> <http://vivoweb.org/ontology/core#dateTimeInterval> <" + dateTimeInterval + "> . \n");
+						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> <http://vivoweb.org/ontology/core#DateTimeValue> ?date . \n");
+						//updateQuery.append("<" + qs.get("obj").toString() + "> ?p ?o . \n");
+						updateQuery.append("} \n");
+						updateQuery.append("INSERT { \n");
+						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> . \n");
+						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:DateTimeValue \"" + strDate + "\" . \n");
+						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
+						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> . \n");
+						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-" + role.getEndDate().trim() + "> . \n");
+						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> vitro:mostSpecificType core:DateTimeInterval . \n");
+						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+						updateQuery.append("} \n");
+						updateQuery.append("WHERE { \n");
+						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> <http://vivoweb.org/ontology/core#dateTimeInterval> <" + dateTimeInterval + "> . \n");
+						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> <http://vivoweb.org/ontology/core#DateTimeValue> ?date . \n");
+						//updateQuery.append("<" + qs.get("obj").toString() + "> ?p ?o . \n");
+						updateQuery.append("}");
+						
+						log.info(updateQuery.toString());
+						response = this.vivoClient.vivoUpdateApi(updateQuery.toString());
+						log.info(response);
+						
+						updateCount = updateCount + 1;
+						
+					}
+					//Update to delete any end date which is for a current appointment
+					else if(endDate.equals(this.currYear) && role.getEndDate().equals("CURRENT")) {
+						log.info("Update existing appointment position-" + role.getSorId().trim());
+						StringBuffer updateQuery = new StringBuffer();
+						updateQuery.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
+						updateQuery.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n"); 
+						updateQuery.append("PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n");
+						updateQuery.append("WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");
+						updateQuery.append("DELETE { \n");
+						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> <http://vivoweb.org/ontology/core#dateTimeInterval> <" + dateTimeInterval + "> . \n");
+						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> <http://vivoweb.org/ontology/core#DateTimeValue> ?date . \n");
+						//updateQuery.append("<" + qs.get("obj").toString() + "> ?p ?o . \n");
+						updateQuery.append("} \n");
+						updateQuery.append("INSERT { \n");
+						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + "> . \n");
+						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> core:DateTimeValue \"" + strDate + "\" . \n");
+						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> rdf:type core:DateTimeInterval . \n");
+						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> core:start <" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> . \n");
+						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> vitro:mostSpecificType core:DateTimeInterval . \n");
+						updateQuery.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+						updateQuery.append("} \n");
+						updateQuery.append("WHERE { \n");
+						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> <http://vivoweb.org/ontology/core#dateTimeInterval> <" + dateTimeInterval + "> . \n");
+						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> <http://vivoweb.org/ontology/core#DateTimeValue> ?date . \n");
+						//updateQuery.append("OPTIONAL {<" + qs.get("obj").toString() + "> ?p ?o .} \n");
+						updateQuery.append("}");
+						log.info(updateQuery.toString());
+						response = this.vivoClient.vivoUpdateApi(updateQuery.toString());
+						log.info(response);
+						updateCount = updateCount + 1;
+					}
+					//Delete interim appointment
+					else if(role.isInterimAppointment()) {
+						StringBuffer updateQuery = new StringBuffer();
+						updateQuery.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
+						updateQuery.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n"); 
+						updateQuery.append("PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n");
+						updateQuery.append("WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");
+						updateQuery.append("DELETE { \n");
+						updateQuery.append("<" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> core:relatedBy <" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> . \n");
+						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> ?p ?o . \n");
+						updateQuery.append("} \n");
+						updateQuery.append("WHERE { \n");
+						updateQuery.append("<" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> core:relatedBy <" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> . \n");
+						updateQuery.append("<" + this.vivoNamespace + "position-" + role.getSorId().trim() + "> ?p ?o . \n");
+						updateQuery.append("}");
+						log.info(updateQuery.toString());
+						response = this.vivoClient.vivoUpdateApi(updateQuery.toString());
+						log.info(response);
+						
+						updateCount = updateCount + 1;
+					}
+					else
+						log.info("No updates are necessary for " + ob.getCwid().trim() + " for position-" + role.getSorId().trim());
+				}
+					
+			} catch(Exception e) {
+				log.error("Api Exception", e);
+			}
+			}
+			//Checking for education and training updates
+			for(EducationBean edu: ebean) {
+				StringBuilder sb = new StringBuilder();
+				
+				sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
+				sb.append("SELECT ?obj \n");
+				sb.append("WHERE { \n");
+				sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> { \n");
+				sb.append("<" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> core:relatedBy <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + ">");
+				sb.append("}}");
+				
+				try {
+					String response = this.vivoClient.vivoQueryApi(sb.toString());
+					log.info(response);
+					JSONObject obj = new JSONObject(response);
+					JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+				
+				if(bindings.isEmpty()) {
+					log.info("Insert new education for " + ob.getCwid().trim() + " - educationalTraining-" + edu.getDegreePk().trim());
+					edu.setCrudStatus("INSERT");
+					StringBuffer insertQuery = new StringBuffer();
+					insertQuery.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
+					insertQuery.append("PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n");
+					insertQuery.append("PREFIX vivo: <http://vivoweb.org/ontology/core#> \n");
+					insertQuery.append("PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n");
+					insertQuery.append("PREFIX obo: <http://purl.obolibrary.org/obo/> \n");
+					insertQuery.append("PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n");
+					insertQuery.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
+					insertQuery.append("INSERT DATA { GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> { \n");
+					//for educational training
+					insertQuery.append("<" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> core:relatedBy <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> . \n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> rdf:type core:AwardedDegree . \n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> rdfs:label \"" + edu.getDegreeName().trim() + "\" . \n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:relates <" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> . \n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:relates <" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> . \n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:assignedBy <" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> .\n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0002353 <" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> .\n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + strDate + "\" .\n");
+					insertQuery.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> <http://vivoweb.org/ontology/core#abbreviation> \"" + edu.getDegreeName().trim() + "\" . \n");
+					insertQuery.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> rdfs:label \"" + edu.getDegreeName().trim() + "\" . \n");
+					insertQuery.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> core:relatedBy <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> . \n");
+					insertQuery.append("<" + this.vivoNamespace + "degree/academicDegree" + edu.getBuiltInDegreePk().trim() + "> rdf:type <http://vivoweb.org/ontology/core#AcademicDegree> . \n");
+					insertQuery.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> rdf:type <http://xmlns.com/foaf/0.1/Organization> .\n");
+					insertQuery.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+					insertQuery.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> core:assigns <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> .\n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+					
+					//for educational process
+					insertQuery.append("<" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> core:relatedBy <" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> . \n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> rdf:type core:EducationalProcess . \n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0000057 <" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> . \n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0000057 <" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> . \n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0002234 <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> . \n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> . \n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + strDate + "\" .\n");
+					insertQuery.append("<" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> rdf:type core:DateTimeInterval . \n");
+					insertQuery.append("<" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> core:end <" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> . \n");
+					insertQuery.append("<" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> rdf:type core:DateTimeValue . \n");
+					insertQuery.append("<" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+					insertQuery.append("<" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> core:dateTime \"" + edu.getDateTimeInterval().substring(2).trim() + "\" . \n");
+					insertQuery.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+					insertQuery.append("}}");
+					
+					log.info(insertQuery.toString());
+					response = this.vivoClient.vivoUpdateApi(insertQuery.toString());
+					log.info(response);
+					updateCount = updateCount + 1;
+					
+				}
+				else {
+					//Check for change of institution
+					
+					edu.setCrudStatus("UPDATE");
+					int instituteFk =0;
+					sb.setLength(0);
+					sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
+					sb.append("SELECT ?instituteFk \n");
+					sb.append("WHERE { \n");
+					sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> { \n");
+					sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> core:assignedBy ?instituteFk");
+					sb.append("}}");
+					
+					response = this.vivoClient.vivoQueryApi(sb.toString());
+					log.info(response);
+					obj = new JSONObject(response);
+					bindings = obj.getJSONObject("results").getJSONArray("bindings");
+					
+					if(bindings.getJSONObject(0).optJSONObject("instituteFk") != null && bindings.getJSONObject(0).optJSONObject("instituteFk").has("value")) {
+						instituteFk = Integer.parseInt(bindings.getJSONObject(0).optJSONObject("instituteFk").getString("value").replace(this.vivoNamespace + "org-", ""));
+					}
+					if(instituteFk != Integer.parseInt(edu.getInstituteFk())) {
+						log.info("Insitition needs to be updated to " + edu.getInstituion() + " for educationalTraining-" + edu.getDegreePk().trim() + " with cwid " + ob.getCwid().trim());
+						sb.setLength(0);
+						sb.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
+						sb.append("PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>");
+						sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
+						sb.append("PREFIX obo: <http://purl.obolibrary.org/obo/> \n");
+						sb.append("WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");
+						sb.append("DELETE { \n");
+						sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> core:assignedBy <" + this.vivoNamespace + "org-" + instituteFk + "> . \n");
+						sb.append("<" + this.vivoNamespace + "org-" + instituteFk + "> core:assigns <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> .\n");
+						sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0000057 <" + this.vivoNamespace + "org-" + instituteFk + "> . \n");
+						sb.append("} \n");
+						sb.append("INSERT { \n");
+						sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> core:assignedBy <" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> . \n");
+						sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> core:assigns <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> .\n");
+						sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> rdf:type <http://xmlns.com/foaf/0.1/Organization> .\n");
+						sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> rdfs:label \"" + edu.getInstituion() + "\" .\n");
+						sb.append("<" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" .\n");
+						sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0000057 <" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> . \n");
+						sb.append("} \n");
+						sb.append("WHERE { \n");
+						sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> core:assignedBy <" + this.vivoNamespace + "org-" + instituteFk + "> . \n");
+						sb.append("<" + this.vivoNamespace + "org-" + instituteFk + "> core:assigns <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> .\n");
+						sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0000057 <" + this.vivoNamespace + "org-" + instituteFk + "> . \n");
+						sb.append("}");
+						
+						log.info(sb.toString());
+						response = this.vivoClient.vivoUpdateApi(sb.toString());
+						log.info(response);
+					}
+					else	
+						log.info("No updates are necessary for " + ob.getCwid().trim() + " for educationalTraining-" + edu.getDegreePk().trim());
+				}
+				} catch(Exception e) {
+					log.error("Api Exception", e);
+				}
+			}
+			
+			
+			insertInferenceTriples(ob);
+			//Check if any appointment needs to be deleted in VIVO
+			syncAppointmentsInVivoUsingTDB(rb, cwid);
 			
 			return updateCount;
 			
@@ -1301,10 +1705,10 @@ public class AppointmentsFetchFromED {
 			sb.append("}}");
 
 			
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+			TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
 			
 			try {
-				ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
+				ResultSet rs = runTDBSparqlTemplate(sb.toString(), vivoJena);
 				
 				
 				while(rs.hasNext()) {
@@ -1336,7 +1740,7 @@ public class AppointmentsFetchFromED {
 				// TODO Auto-generated catch block
 				log.error("IOException" ,e);
 			}
-			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+			this.tcf.returnConnectionToPool(vivoJena, "dataSet");
 			for(RoleBean r: vivoRole) {
 				//try{
 					//log.info(r.toString());
@@ -1419,14 +1823,14 @@ public class AppointmentsFetchFromED {
 							
 							log.info(sb.toString());
 							
-							vivoJena = this.jcf.getConnectionfromPool("dataSet");
+							vivoJena = this.tcf.getConnectionfromPool("dataSet");
 							
 							try {
-								runSparqlUpdateTemplate(sb.toString(), vivoJena);
+								runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
 							} catch(IOException e) {
 								log.error("IOException" ,e);
 							}
-							this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+							this.tcf.returnConnectionToPool(vivoJena, "dataSet");
 						}
 						
 					}
@@ -1457,15 +1861,15 @@ public class AppointmentsFetchFromED {
 						
 						log.info(sb.toString());
 						
-						vivoJena = this.jcf.getConnectionfromPool("dataSet");
+						vivoJena = this.tcf.getConnectionfromPool("dataSet");
 						
 						try {
-							runSparqlUpdateTemplate(sb.toString(), vivoJena);
+							runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
 						} catch(IOException e) {
 							// TODO Auto-generated catch block
 							log.error("IOException" ,e);
 						}
-						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+						this.tcf.returnConnectionToPool(vivoJena, "dataSet");
 						//Delete from inference Graph
 						
 						
@@ -1489,15 +1893,241 @@ public class AppointmentsFetchFromED {
 						
 						log.info(sb.toString());
 						
-						vivoJena = this.jcf.getConnectionfromPool("dataSet");
+						vivoJena = this.tcf.getConnectionfromPool("dataSet");
 						
 						try {
-							runSparqlUpdateTemplate(sb.toString(), vivoJena);
+							runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
 						} catch(IOException e) {
 							// TODO Auto-generated catch block
 							log.error("IOException" ,e);
 						}
-						this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+						this.tcf.returnConnectionToPool(vivoJena, "dataSet");
+						
+					}
+				/*}
+				catch(NoSuchElementException nse) {
+					log.info("The position does not exist in VIVO");
+				}*/
+			}
+		}
+
+		/**
+		 * This is the function which will sync appointments from ED to VIVO
+		 * @param edRole This is the list of roles from Enterprise Directory
+		 * @param cwid This is the unique identifier of the person
+		 */
+		private void syncAppointmentsInVivoUsingTDB(ArrayList<RoleBean> edRole, String cwid) {
+			Date now = new Date();
+			String strDate = sdf.format(now);
+			ArrayList<RoleBean> vivoRole = new ArrayList<RoleBean>();
+			
+			StringBuilder sb = new StringBuilder();
+			
+			sb.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
+			sb.append("PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n");
+			sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
+			sb.append("SELECT ?position ?org ?start ?end ?dateTime \n");
+			sb.append("WHERE {\n");
+			sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> { \n");
+			sb.append("<" + this.vivoNamespace + "cwid-" + cwid + "> core:relatedBy ?position . \n");
+			sb.append("?position a core:Position . \n");
+			sb.append("?position core:relates ?org . \n");
+			sb.append("?org rdf:type core:AcademicDepartment . \n");
+			sb.append("?position core:dateTimeInterval ?dateTime . \n");
+			sb.append("OPTIONAL {?dateTime a core:DateTimeInterval . }\n");
+			sb.append("OPTIONAL {?dateTime core:start ?start . }\n");
+			sb.append("OPTIONAL {?dateTime core:end ?end . }\n");
+			sb.append("}}");
+
+			try {
+				String response = vivoClient.vivoQueryApi(sb.toString());
+				log.info(response);
+				JSONObject obj = new JSONObject(response);
+				JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+				if(bindings != null && !bindings.isEmpty()) {
+					for (int i = 0; i < bindings.length(); ++i) {
+						RoleBean r = new RoleBean();
+						if(bindings.getJSONObject(i).optJSONObject("position") != null && bindings.getJSONObject(i).optJSONObject("position").has("value")) {
+							r.setSorId(bindings.getJSONObject(i).getJSONObject("position").getString("value").replace(this.vivoNamespace + "position-", "").trim());
+						}
+						
+						if(bindings.getJSONObject(i).optJSONObject("org") != null && bindings.getJSONObject(i).optJSONObject("org").has("value")) {
+							r.setDeptCode(Integer.parseInt(bindings.getJSONObject(i).getJSONObject("org").getString("value").replace(this.vivoNamespace + "org-u", "").trim()));
+						}
+						
+						if(bindings.getJSONObject(i).optJSONObject("start") != null && bindings.getJSONObject(i).optJSONObject("start").has("value")) {
+							r.setStartDate(bindings.getJSONObject(i).getJSONObject("start").getString("value").replace(this.vivoNamespace + "date-", ""));
+						}
+						
+						if(bindings.getJSONObject(i).optJSONObject("end") != null && bindings.getJSONObject(i).optJSONObject("end").has("value")) {
+							r.setEndDate(bindings.getJSONObject(i).getJSONObject("end").getString("value").replace(this.vivoNamespace + "date-", ""));
+						}
+						else
+							r.setEndDate("CURRENT");
+						
+						vivoRole.add(r);
+						
+					}
+				}
+			}
+			catch(Exception e) {
+				log.error("API Exception" ,e);
+			}
+			
+			for(RoleBean r: vivoRole) {
+				//try{
+					//log.info(r.toString());
+					if(edRole.stream().anyMatch(er -> er.getSorId().equals(r.getSorId()))) {
+						log.info("The position - " + r.getSorId() + " exist in both ED and VIVO. Checking for date ranges.");
+						//Check for date range
+						if(edRole.stream().anyMatch(er -> er.getStartDate().equals(r.getStartDate()) && er.getEndDate().equals(r.getEndDate()))) {
+							log.info("Date Range Matches. No change required.");
+						}
+						else {
+							RoleBean role = edRole.stream().filter(er-> er.getSorId().equals(r.getSorId())).findFirst().get();
+							log.info("Date does not match from ED : start - " + role.getStartDate() + " end - " + role.getEndDate() + " with VIVO : start - " + r.getStartDate() + " end - " + r.getEndDate());
+							
+							if(sb.length() > 0)
+								sb.setLength(0);
+							
+							
+							sb.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
+							sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n"); 
+							sb.append("PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n");
+							if(r.getStartDate() != null)
+								sb.append("WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");
+							if(r.getStartDate() != null) { //No Date Interval exist in the system
+								sb.append("DELETE { \n");
+								if(r.getEndDate().equals("CURRENT")) {
+									sb.append("<" + this.vivoNamespace + "position-" + r.getSorId().trim() + "> <http://vivoweb.org/ontology/core#dateTimeInterval> <" + this.vivoNamespace + "dtinterval-" + r.getStartDate().trim() + "to> . \n");
+									//sb.append("<" + this.vivoNamespace + "dtinterval-" + r.getStartDate().trim() + "to> ?p ?o . \n");
+								}
+								else {
+									sb.append("<" + this.vivoNamespace + "position-" + r.getSorId().trim() + "> <http://vivoweb.org/ontology/core#dateTimeInterval> <" + this.vivoNamespace + "dtinterval-" + r.getStartDate().trim() + "to" + r.getEndDate().trim() + "> . \n");
+									//sb.append("<" + this.vivoNamespace + "dtinterval-" + r.getStartDate().trim() + "to" + r.getEndDate().trim() + "> ?p ?o . \n");
+								}
+									
+								sb.append("<" + this.vivoNamespace + "position-" + r.getSorId().trim() + "> <http://vivoweb.org/ontology/core#DateTimeValue> ?date . \n");
+								
+								sb.append("} \n");
+							}
+							
+							if(r.getStartDate() == null) {
+								sb.append("INSERT DATA { \n");
+								sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> { \n");
+							}
+							else 
+								sb.append("INSERT { \n");
+							
+							if(role.getEndDate().equals("CURRENT")) {
+								sb.append("<" + this.vivoNamespace + "position-" + r.getSorId().trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> . \n");
+								sb.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> rdf:type core:DateTimeInterval . \n");
+								sb.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> core:start <" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> . \n");
+								sb.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> vitro:mostSpecificType core:DateTimeInterval . \n");
+								sb.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
+							else {
+								sb.append("<" + this.vivoNamespace + "position-" + r.getSorId().trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> . \n");
+								sb.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> rdf:type core:DateTimeInterval . \n");
+								sb.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> core:start <" + this.vivoNamespace + "date-" + role.getStartDate().trim() + "> . \n");
+								sb.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> core:end <" + this.vivoNamespace + "date-" + role.getEndDate().trim() + "> . \n");
+								sb.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> vitro:mostSpecificType core:DateTimeInterval . \n");
+								sb.append("<" + this.vivoNamespace + "dtinterval-" + role.getStartDate().trim() + "to" + role.getEndDate().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
+							}
+							sb.append("<" + this.vivoNamespace + "position-" + r.getSorId().trim() + "> core:DateTimeValue \"" + strDate + "\" . \n");
+							sb.append("} \n");
+							if(r.getStartDate() == null) {
+								sb.append("}");
+							}
+							if(r.getStartDate() != null) { //No Date Interval exist in the system
+								sb.append("WHERE { \n");
+								if(r.getEndDate().equals("CURRENT")) {
+									sb.append("<" + this.vivoNamespace + "position-" + r.getSorId().trim() + "> <http://vivoweb.org/ontology/core#dateTimeInterval> <" + this.vivoNamespace + "dtinterval-" + r.getStartDate().trim() + "to> . \n");
+									//sb.append("<" + this.vivoNamespace + "dtinterval-" + r.getStartDate().trim() + "to> ?p ?o . \n");
+								}
+								else {
+									sb.append("<" + this.vivoNamespace + "position-" + r.getSorId().trim() + "> <http://vivoweb.org/ontology/core#dateTimeInterval> <" + this.vivoNamespace + "dtinterval-" + r.getStartDate().trim() + "to" + r.getEndDate().trim() + "> . \n");
+									//sb.append("<" + this.vivoNamespace + "dtinterval-" + r.getStartDate().trim() + "to" + r.getEndDate().trim() + "> ?p ?o . \n");
+								}
+									
+								sb.append("<" + this.vivoNamespace + "position-" + r.getSorId().trim() + "> <http://vivoweb.org/ontology/core#DateTimeValue> ?date . \n");
+								sb.append("}");
+							}
+							
+							log.info(sb.toString());
+							try{
+								String response = this.vivoClient.vivoUpdateApi(sb.toString());
+								log.info(response);
+							} catch(Exception  e) {
+								log.info("Api Exception", e);
+							}
+						}
+						
+					}
+					else {
+						log.info("The position - " + r.getSorId() + " does not exist in ED anymore. Removing from VIVO");
+						
+						if(sb.length() > 0)
+							sb.setLength(0);
+						
+						log.info("Deleting position - " + r.getSorId() + " from wcmcOfa graph");
+						
+						sb.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
+						sb.append("PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n");
+						sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
+						sb.append("WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");
+						sb.append("DELETE { \n");
+						sb.append("<" + this.vivoNamespace + "cwid-" + cwid + "> core:relatedBy <" + this.vivoNamespace + "position-" + r.getSorId() + "> . \n");
+						sb.append("<" + this.vivoNamespace + "position-" + r.getSorId() + "> ?p ?o . \n");
+						sb.append("<" + this.vivoNamespace + "position-" + r.getSorId().trim() + "> core:relates <" + this.vivoNamespace + "org-u" + r.getDeptCode() + "> . \n");
+						sb.append("<" + this.vivoNamespace + "org-u" + r.getDeptCode() + "> core:relatedBy <" + this.vivoNamespace + "position-" + r.getSorId().trim() +"> . \n");
+						sb.append("} \n");
+						sb.append("WHERE { \n");
+						sb.append("OPTIONAL { <" + this.vivoNamespace + "cwid-" + cwid + "> core:relatedBy <" + this.vivoNamespace + "position-" + r.getSorId() + "> . }\n");
+						sb.append("OPTIONAL { <" + this.vivoNamespace + "position-" + r.getSorId() + "> ?p ?o . }\n");
+						sb.append("OPTIONAL { <" + this.vivoNamespace + "position-" + r.getSorId().trim() + "> core:relates <" + this.vivoNamespace + "org-u" + r.getDeptCode() + "> . }\n");
+						sb.append("OPTIONAL { <" + this.vivoNamespace + "org-u" + r.getDeptCode() + "> core:relatedBy <" + this.vivoNamespace + "position-" + r.getSorId().trim() +"> . }\n");
+						sb.append("}");
+						
+						log.info(sb.toString());
+						
+						try{
+							String response = this.vivoClient.vivoUpdateApi(sb.toString());
+							log.info(response);
+						} catch(Exception  e) {
+							log.info("Api Exception", e);
+						}
+						
+						//Delete from inference Graph
+						
+						
+						if(sb.length() > 0)
+							sb.setLength(0);
+						
+						log.info("Deleting position - " + r.getSorId() + " from inference graph");
+						
+						sb.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
+						sb.append("PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n");
+						sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
+						sb.append("WITH <http://vitro.mannlib.cornell.edu/default/vitro-kb-inf> \n");
+						sb.append("DELETE { \n");
+						sb.append("<" + this.vivoNamespace + "position-" + r.getSorId() + "> ?p ?o . \n");
+						sb.append("<" + this.vivoNamespace + "org-u" + r.getDeptCode() + "> core:contributingRole <" + this.vivoNamespace + "position-" + r.getSorId().trim() +"> . \n");
+						sb.append("} \n");
+						sb.append("WHERE { \n");
+						sb.append("OPTIONAL { <" + this.vivoNamespace + "position-" + r.getSorId() + "> ?p ?o . }\n");
+						sb.append("OPTIONAL { <" + this.vivoNamespace + "org-u" + r.getDeptCode() + "> core:contributingRole <" + this.vivoNamespace + "position-" + r.getSorId().trim() +"> . }\n");
+						sb.append("}");
+						
+						log.info(sb.toString());
+						
+						try{
+							String response = this.vivoClient.vivoUpdateApi(sb.toString());
+							log.info(response);
+						} catch(Exception  e) {
+							log.info("Api Exception", e);
+						} 
+						
 						
 					}
 				/*}
@@ -1523,14 +2153,34 @@ public class AppointmentsFetchFromED {
 			sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> { \n");
 			sb.append("<" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> ?p ?o . \n");
 			sb.append("}}");
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				try{
+					String response = this.vivoClient.vivoQueryApi(sb.toString());
+					log.info(response);
+					JSONObject obj = new JSONObject(response);
+					JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+					count = bindings.getJSONObject(0).getJSONObject("positionCount").getInt("value");
+				} catch(Exception  e) {
+					log.info("Api Exception", e);
+				}
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+				ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
+				QuerySolution qs = rs.nextSolution();
+				count = Integer.parseInt(qs.get("positionCount").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
+				//Close the connection
+				if(vivoJena!= null)
+					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+			} else {
+				TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
+				ResultSet rs = vivoJena.executeSelectQuery(sb.toString(), true);
+				QuerySolution qs = rs.nextSolution();
+				count = Integer.parseInt(qs.get("positionCount").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
+				//Close the connection
+				if(vivoJena!= null)
+					this.tcf.returnConnectionToPool(vivoJena, "dataSet");
+			}
 			
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
-			ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
-			QuerySolution qs = rs.nextSolution();
-			count = Integer.parseInt(qs.get("positionCount").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
-			//Close the connection
-			if(vivoJena!= null)
-				this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			if(count > 0)
 				return true;
 			
@@ -1555,13 +2205,29 @@ public class AppointmentsFetchFromED {
 		 * @throws IOException default exception thrown
 		 */
 		private void runSparqlUpdateTemplate(String sparqlQuery, SDBJenaConnect vivoJena) throws IOException {
-			
 			vivoJena.executeUpdateQuery(sparqlQuery, true);
-
 			//log.info("Inserted success");
-			
-			
 		
+		}
+
+		/**
+		 * Template to fit in different JenaConnect queries.
+		 * @param sparqlQuery contains the query
+		 * @return ResultSet containing all the results
+		 * @throws IOException default exception thrown
+		 */
+		private ResultSet runTDBSparqlTemplate(String sparqlQuery, TDBJenaConnect vivoJena) throws IOException {		
+			return vivoJena.executeSelectQuery(sparqlQuery, true);
+		}
+		
+		/**
+		 * Template to fit in different JenaConnect queries.
+		 * @param sparqlQuery contains the query
+		 * @param vivoJena connection to SDB jenas
+		 * @throws IOException default exception thrown
+		 */
+		private void runTDBSparqlUpdateTemplate(String sparqlQuery, TDBJenaConnect vivoJena) throws IOException {
+			vivoJena.executeUpdateQuery(sparqlQuery, true);
 		}
 		/**
 	     * This function generates a hashcode for a department name(Not used in this class)

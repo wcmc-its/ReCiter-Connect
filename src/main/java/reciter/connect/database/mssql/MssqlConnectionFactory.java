@@ -29,6 +29,10 @@ import java.util.List;
 import java.util.Map;
 
 import javax.inject.Inject;
+import javax.sql.DataSource;
+
+import com.mchange.v2.c3p0.ComboPooledDataSource;
+import com.mchange.v2.c3p0.PooledDataSource;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -59,6 +63,9 @@ public class MssqlConnectionFactory {
 	
 	private List<Connection> asmsConnectionPool = new ArrayList<>(); 
 	private List<Connection> infoEdConnectionPool = new ArrayList<>(); 
+
+	private static ComboPooledDataSource asmsDataSource;
+	private static ComboPooledDataSource infoedDataSource;
 	
 	/**
 	 * @param propertyFilePath the path of property file
@@ -73,7 +80,7 @@ public class MssqlConnectionFactory {
 		this.infoEdUsername = infoEdUsername;
 		this.infoEdPassword = env.getProperty("MSSQL_INFOED_DB_PASSWORD");
 		this.infoEdUrl = env.getProperty("MSSQL_INFOED_DB_URL");
-		initialize();
+		//initialize();
 	}
 	
 	/**
@@ -209,8 +216,55 @@ public class MssqlConnectionFactory {
 			} catch (ClassNotFoundException cnfe) {
 				log.error("ClassNotFoundException: " , cnfe);
 			}
-}
+		}
 		return con;
+	}
+
+	public void createC3PODatasourceForASMS() {
+		asmsDataSource = new ComboPooledDataSource();
+		//dataSource.setDriverClass("com.microsoft.sqlserver.jdbc.SQLServerDriver");
+		asmsDataSource.setJdbcUrl(this.url);
+		asmsDataSource.setUser(this.username);
+		asmsDataSource.setPassword(this.password);
+		
+		asmsDataSource.setMinPoolSize(2);
+		asmsDataSource.setMaxPoolSize(50);
+		asmsDataSource.setAcquireIncrement(5);
+	}
+
+	public void createC3PODatasourceForInfoEd() {
+		infoedDataSource = new ComboPooledDataSource();
+		//dataSource.setDriverClass("com.microsoft.sqlserver.jdbc.SQLServerDriver");
+		infoedDataSource.setJdbcUrl(this.infoEdUrl);
+		infoedDataSource.setUser(this.infoEdUsername);
+		infoedDataSource.setPassword(this.infoEdPassword);
+		
+		infoedDataSource.setMinPoolSize(2);
+		infoedDataSource.setMaxPoolSize(50);
+		infoedDataSource.setAcquireIncrement(5);
+	}
+
+	public static DataSource getASMSDataSource(){
+		return asmsDataSource;
+	}
+
+	public static DataSource getInfoedDataSource(){
+		return infoedDataSource;
+	}
+
+	public static void dataSourceCleanup(DataSource ds) {
+		// make sure it's a c3p0 PooledDataSource
+		if ( ds instanceof PooledDataSource)
+		{
+			PooledDataSource pds = (PooledDataSource) ds;
+			try {
+				pds.close();
+			} catch (SQLException e) {
+				log.error("Error closing connections: " , e);
+			}
+		}     
+		else
+		  log.info("Not a c3p0 PooledDataSource!");
 	}
 
 }

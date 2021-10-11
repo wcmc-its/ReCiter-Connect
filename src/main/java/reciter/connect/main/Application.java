@@ -1,8 +1,6 @@
 package reciter.connect.main;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -30,12 +28,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import org.springframework.retry.annotation.EnableRetry;
 import org.springframework.util.StopWatch;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.vivoweb.harvester.ingest.AcademicFetchFromED;
 import org.vivoweb.harvester.ingest.AppointmentsFetchFromED;
-import org.vivoweb.harvester.ingest.EdDataInterface;
 import org.vivoweb.harvester.ingest.GrantsFetchFromED;
 import org.vivoweb.harvester.operations.DeleteProfile;
 
@@ -51,11 +49,11 @@ import reciter.connect.database.ldap.LDAPConnectionFactory;
 import reciter.connect.database.mssql.MssqlConnectionFactory;
 import reciter.connect.database.mysql.MysqlConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
-import reciter.connect.vivo.api.client.VivoClient;
 import reciter.connect.vivo.sdb.publications.service.VivoPublicationsService;
 
 @SpringBootApplication
 @PropertySource("classpath:application.properties")
+@EnableRetry
 @ComponentScan({ "reciter.connect", "org.vivoweb.harvester" })
 @Slf4j
 public class Application implements ApplicationRunner {
@@ -72,12 +70,6 @@ public class Application implements ApplicationRunner {
 
     @Autowired
     private VivoPublicationsService vivoPublicationsService;
-
-    @Autowired
-    private VivoClient vivoClient;
-
-    @Autowired
-    private EdDataInterface edDataInterface;
 
     @Bean
     public WebClient getWebClient() {
@@ -99,11 +91,6 @@ public class Application implements ApplicationRunner {
     public static void main(String[] args) {
         new SpringApplicationBuilder(Application.class).web(WebApplicationType.NONE).run(args);
     }
-
-    /* @PostConstruct
-    public void run() {
-        
-    }*/
  
     @Override
     public void run(ApplicationArguments args) throws Exception {
@@ -116,6 +103,17 @@ public class Application implements ApplicationRunner {
         AppointmentsFetchFromED appointmentsFetchFromED = context.getBean(AppointmentsFetchFromED.class);
         ReCiterClient reCiterClient = context.getBean(ReCiterClient.class);
         DeleteProfile deleteProfile = context.getBean(DeleteProfile.class);
+        mssqlConnectionFactory.createC3PODatasourceForASMS();
+        mssqlConnectionFactory.createC3PODatasourceForInfoEd();
+        Connection asmsCon = null;
+        Connection infoEdCon = null;
+        try {
+            asmsCon = MssqlConnectionFactory.getASMSDataSource().getConnection();
+            infoEdCon = MssqlConnectionFactory.getInfoedDataSource().getConnection();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+
         //academicFetchFromED.getCOIData();
 
         ExecutorService executor = Executors.newFixedThreadPool(25);
@@ -148,6 +146,7 @@ public class Application implements ApplicationRunner {
                 }
                 callables.clear();
             }
+
             List<String> peopleCwids = people.stream().map(PeopleBean::getCwid).collect(Collectors.toList());
             
             List<List<String>> peopleCwidsSubSets = Lists.partition(peopleCwids, 5);
@@ -156,8 +155,8 @@ public class Application implements ApplicationRunner {
                 List<String> subsetPeoples = subSetsIteratorPeopleCwids.next();
                 List<Callable<String>> callables = new ArrayList<>();
                 for(String cwid: subsetPeoples) {
-                    callables.add(appointmentsFetchFromED.getCallable(Arrays.asList(cwid)));
-                    callables.add(grantsFetchFromED.getCallable(Arrays.asList(cwid)));
+                    callables.add(appointmentsFetchFromED.getCallable(Arrays.asList(cwid), asmsCon));
+                    callables.add(grantsFetchFromED.getCallable(Arrays.asList(cwid), asmsCon, infoEdCon));
                 }
                 log.info("Appointment and Grants fetch will run for " + subsetPeoples.toString());
                 try {
@@ -184,8 +183,17 @@ public class Application implements ApplicationRunner {
             if (mysqlConnectionFactory != null)
                 mysqlConnectionFactory.destroyConnectionPool();
 
-            if (mssqlConnectionFactory != null)
-                mssqlConnectionFactory.destroyConnectionPool();
+            if(asmsCon != null && infoEdCon != null) {
+                try {
+                    asmsCon.close();
+                    infoEdCon.close();
+                } catch (SQLException e) {
+                    log.error("SQLException", e);
+                }
+            }
+
+            MssqlConnectionFactory.dataSourceCleanup(MssqlConnectionFactory.getASMSDataSource());
+            MssqlConnectionFactory.dataSourceCleanup(MssqlConnectionFactory.getInfoedDataSource());
 
             for(List<String> subsetPeoples: peopleCwidsSubSets) {
                 List<Callable<String>> callables = new ArrayList<>();
@@ -224,7 +232,7 @@ public class Application implements ApplicationRunner {
                     }
                 }
                 callables.clear();
-            } 
+            }
             
 
         } catch (Exception e) {

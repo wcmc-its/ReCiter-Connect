@@ -1,26 +1,22 @@
-package reciter.connect.database.mysql.jena;
+package reciter.connect.database.tdb;
 
-import java.io.IOException;
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.sql.DriverManager;
 
 import javax.inject.Inject;
-import org.springframework.context.annotation.Scope;
-import org.springframework.core.env.Environment;
-import org.springframework.stereotype.Component;
-import org.vivoweb.harvester.util.repo.SDBJenaConnect;
-
-import lombok.extern.slf4j.Slf4j;
-import reciter.connect.vivo.sdb.VivoGraphs;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import org.springframework.context.annotation.Scope;
+import org.springframework.core.env.Environment;
+import org.springframework.stereotype.Component;
+import org.vivoweb.harvester.util.repo.TDBJenaConnect;
+
+import lombok.extern.slf4j.Slf4j;
+import reciter.connect.database.mysql.jena.JenaConnectionFactory;
 
 
 /**
@@ -31,7 +27,7 @@ import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 @Slf4j
 @Component
 @Scope(value = ConfigurableBeanFactory.SCOPE_SINGLETON)
-public class JenaConnectionFactory {
+public class TDBConnectionFactory {
 	
 	/**
 	 * This is the default namespace for your institution
@@ -39,42 +35,28 @@ public class JenaConnectionFactory {
     public String nameSpaceProp;
     public static String nameSpace;
 	
-	private String dbHost = null; 
-	private String jenaDbUser = null;
-	private String jenaDbPassword = null;
-	private String dbType = null;
-	private String dbDriver = null;
-	private String dbLayout = null;
-	private String dbModel = null; 
+	private String dbDir = null;
 	
-	private Map<SDBJenaConnect, String> connectionPool = new HashMap<SDBJenaConnect, String>(); 
+	private Map<TDBJenaConnect, String> connectionPool = new HashMap<>(); 
 	
 	/**
 	 * @param propertyFilePath the path of property file
 	 */
     @Inject
     @Autowired(required = true)
-    public JenaConnectionFactory(@Value("${jena.dbUsername}") String username, Environment env, @Value("${jena.url}") String url,
-    @Value("${jena.dbModel}") String dbModel, @Value("${jena.dbLayout}") String dbLayout, @Value("${jena.dbType}") String dbType,
-    @Value("${jena.dbDriver}") String dbDriver, @Value("${vivoNamespace}") String namespace) {
-        this.jenaDbUser = username;
-        this.jenaDbPassword = env.getProperty("JENA_DB_PASSWORD");
-        this.dbHost = url;
-        this.dbType = dbType;
-        this.dbModel = dbModel;
-        this.dbLayout = dbLayout;
-		this.dbDriver = dbDriver;
+    public TDBConnectionFactory(Environment env, @Value("${vivoNamespace}") String namespace) {
+        this.dbDir = env.getProperty("TDB_DIR");
 		this.nameSpaceProp = namespace;
 		//initialize();
 		if(nameSpaceProp != null && nameSpaceProp.trim().length() != 0) {
-			JenaConnectionFactory.nameSpace=(nameSpaceProp.trim().endsWith("/"))?nameSpaceProp.trim():nameSpaceProp.trim().concat("/");
+			TDBConnectionFactory.nameSpace=(nameSpaceProp.trim().endsWith("/"))?nameSpaceProp.trim():nameSpaceProp.trim().concat("/");
         }
 	}
 	
 	/**
 	 * This method initializes and creates and populates the connection pool
 	 */
-	private void initialize() {
+	public void initialize() {
 		initializeConnectionPool();
 		
 	}
@@ -95,7 +77,7 @@ public class JenaConnectionFactory {
 	 * @return boolean
 	 */
 	private synchronized boolean checkIfConnectionPoolIsFull() {
-		final int MAX_POOL_SIZE = 25;
+		final int MAX_POOL_SIZE = 5;
 		if(this.connectionPool.size()<MAX_POOL_SIZE)
 			return false;
 		else
@@ -107,13 +89,13 @@ public class JenaConnectionFactory {
 	 * @param graphName the graphName for which the connection will be created
 	 * @return the jena connection object
 	 */
-	public synchronized SDBJenaConnect getConnectionfromPool(String graphName){
+	public synchronized TDBJenaConnect getConnectionfromPool(String graphName){
 			
-		SDBJenaConnect con = null;
+		TDBJenaConnect con = null;
 			if(this.connectionPool.size()>0){
-				Iterator<Entry<SDBJenaConnect, String>> it = this.connectionPool.entrySet().iterator();
+				Iterator<Entry<TDBJenaConnect, String>> it = this.connectionPool.entrySet().iterator();
 				while(it.hasNext()) {
-					Entry<SDBJenaConnect, String> pair = it.next();
+					Entry<TDBJenaConnect, String> pair = it.next();
 					if(graphName.equals(pair.getValue())) {
 						con = pair.getKey();
 						
@@ -131,7 +113,7 @@ public class JenaConnectionFactory {
 	 * @param connection The connection object to SDBJena
 	 * @param graphName the graphName for which the connection will be created
 	 */
-	public synchronized void returnConnectionToPool(SDBJenaConnect connection, String graphName)
+	public synchronized void returnConnectionToPool(TDBJenaConnect connection, String graphName)
     {
         //Adding the connection from the client back to the connection pool
         this.connectionPool.put(connection, graphName);
@@ -141,9 +123,9 @@ public class JenaConnectionFactory {
 	 * This function iterate through the connection pool and destroys all the connections
 	 */
 	public void destroyConnectionPool() {
-		for (SDBJenaConnect key : this.connectionPool.keySet()) {
+		for (TDBJenaConnect key : this.connectionPool.keySet()) {
 			if(key != null)
-				key.close();
+				key.getDataset().close();
 		}
 		this.connectionPool.clear();
 		log.info("All Jena connections were destroyed");
@@ -155,17 +137,10 @@ public class JenaConnectionFactory {
 	 * @param graphName the graphName for which the connection will be created
 	 * @return the jena connection object
 	 */
-	public SDBJenaConnect createNewConnectionForPool(String graphName)
+	public TDBJenaConnect createNewConnectionForPool(String graphName)
 	{
-		
-		SDBJenaConnect vivoJena = null;		
-		try {
-            vivoJena = new SDBJenaConnect(this.dbHost, this.jenaDbUser, this.jenaDbPassword, this.dbType, this.dbDriver, this.dbLayout, graphName);
-		} catch(IOException e) {
-			log.error("IOException", e);
-		}
+		TDBJenaConnect vivoJena = new TDBJenaConnect(this.dbDir, graphName);		
 		return vivoJena;
-	
 	}
 	
 	/**
@@ -174,32 +149,9 @@ public class JenaConnectionFactory {
 	 * @param graphName the graphName for which the connection will be created
 	 * @return the jena connection object
 	 */
-	public SDBJenaConnect createNewDataSetConnectionForPool()
+	public TDBJenaConnect createNewDataSetConnectionForPool()
 	{
-		SDBJenaConnect vivoJena = null;
-		try {
-            vivoJena = new SDBJenaConnect(this.dbHost, this.jenaDbUser, this.jenaDbPassword, this.dbType, this.dbDriver, this.dbLayout);
-		} catch(IOException e) {
-			log.error("IOException", e);
-		}
+		TDBJenaConnect vivoJena = new TDBJenaConnect(this.dbDir); 
 		return vivoJena;
-	
-	}
-
-	public Connection getDirectConnectionToVivoDatabase()
-	{
-		
-		Connection con = null;
-		
-		if (!this.dbHost.isEmpty() && !this.jenaDbUser.isEmpty() && !this.jenaDbPassword.isEmpty()) {
-
-					try {
-						con = DriverManager.getConnection(this.dbHost, this.jenaDbUser, this.jenaDbPassword);
-					} 
-					catch(SQLException e) {
-						log.error("SQLException: " , e);
-					} 
-		}
-		return con;
 	}
 }
