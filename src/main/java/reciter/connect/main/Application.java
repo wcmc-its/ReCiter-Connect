@@ -34,7 +34,6 @@ import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.vivoweb.harvester.ingest.AcademicFetchFromED;
 import org.vivoweb.harvester.ingest.AppointmentsFetchFromED;
-import org.vivoweb.harvester.ingest.EdDataInterface;
 import org.vivoweb.harvester.ingest.GrantsFetchFromED;
 import org.vivoweb.harvester.operations.DeleteProfile;
 
@@ -50,7 +49,6 @@ import reciter.connect.database.ldap.LDAPConnectionFactory;
 import reciter.connect.database.mssql.MssqlConnectionFactory;
 import reciter.connect.database.mysql.MysqlConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
-import reciter.connect.vivo.api.client.VivoClient;
 import reciter.connect.vivo.sdb.publications.service.VivoPublicationsService;
 
 @SpringBootApplication
@@ -93,11 +91,6 @@ public class Application implements ApplicationRunner {
     public static void main(String[] args) {
         new SpringApplicationBuilder(Application.class).web(WebApplicationType.NONE).run(args);
     }
-
-    /* @PostConstruct
-    public void run() {
-        
-    }*/
  
     @Override
     public void run(ApplicationArguments args) throws Exception {
@@ -105,7 +98,6 @@ public class Application implements ApplicationRunner {
         MysqlConnectionFactory mysqlConnectionFactory = context.getBean(MysqlConnectionFactory.class);
         MssqlConnectionFactory mssqlConnectionFactory = context.getBean(MssqlConnectionFactory.class);
         JenaConnectionFactory jenaConnectionFactory = context.getBean(JenaConnectionFactory.class);
-        //TDBConnectionFactory tdbConnectionFactory = context.getBean(TDBConnectionFactory.class);
         AcademicFetchFromED academicFetchFromED = context.getBean(AcademicFetchFromED.class);
         GrantsFetchFromED grantsFetchFromED = context.getBean(GrantsFetchFromED.class);
         AppointmentsFetchFromED appointmentsFetchFromED = context.getBean(AppointmentsFetchFromED.class);
@@ -128,7 +120,7 @@ public class Application implements ApplicationRunner {
 
         try {
             List<PeopleBean> people = academicFetchFromED.getActivePeopleFromED();
-            //deleteProfile.execute();
+            deleteProfile.execute();
             List<List<PeopleBean>> peopleSubSets = Lists.partition(people, 10);
             Iterator<List<PeopleBean>> subSetsIteratorPeople = peopleSubSets.iterator();
             while (subSetsIteratorPeople.hasNext()) {
