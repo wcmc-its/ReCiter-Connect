@@ -14,5 +14,5 @@ public interface EdDataInterface {
 	 * @param jcf Jena connection factory object
 	 * @return List of people in VIVO
 	 */
-	public List<String> getPeopleInVivo(JenaConnectionFactory jcf);
+	public List<String> getPeopleInVivo();
 }

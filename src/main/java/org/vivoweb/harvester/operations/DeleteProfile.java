@@ -1280,7 +1280,7 @@ public class DeleteProfile {
 		
 		int inActiveCount = 0;
 		int activeCount = 0;
-		List<String> people = edi.getPeopleInVivo(this.jcf);
+		List<String> people = edi.getPeopleInVivo();
 		if(people.isEmpty())
 			logger.info("No People needs to be deleted");
 		

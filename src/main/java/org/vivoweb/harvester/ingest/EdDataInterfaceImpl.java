@@ -34,7 +34,7 @@ public class EdDataInterfaceImpl implements EdDataInterface {
 
 	private String ingestType = System.getenv("INGEST_TYPE");
 
-	public List<String> getPeopleInVivo(JenaConnectionFactory jcf) {
+	public List<String> getPeopleInVivo() {
 		
 		List<String> people = new ArrayList<String>();
 
