@@ -1612,10 +1612,12 @@ public class AppointmentsFetchFromED {
 					int instituteFk =0;
 					sb.setLength(0);
 					sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
-					sb.append("SELECT ?instituteFk \n");
+					sb.append("PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>");
+					sb.append("SELECT ?instituteFk ?institutionLabel \n");
 					sb.append("WHERE { \n");
 					sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> { \n");
-					sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> core:assignedBy ?instituteFk");
+					sb.append("<" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk() + "> core:assignedBy ?instituteFk . \n");
+					sb.append("?instituteFk rdfs:label ?institutionLabel . \n");
 					sb.append("}}");
 					
 					response = this.vivoClient.vivoQueryApi(sb.toString());
@@ -1656,8 +1658,25 @@ public class AppointmentsFetchFromED {
 						log.info(sb.toString());
 						response = this.vivoClient.vivoUpdateApi(sb.toString());
 						log.info(response);
-					}
-					else	
+					} else if(instituteFk == Integer.parseInt(edu.getInstituteFk()) && bindings.getJSONObject(0).optJSONObject("institutionLabel") != null && bindings.getJSONObject(0).optJSONObject("institutionLabel").has("value") && !bindings.getJSONObject(0).optJSONObject("institutionLabel").getString("value").equals(edu.getInstituion())) {
+						log.info("Insitition Label needs to be updated to " + edu.getInstituion() + " from " + bindings.getJSONObject(0).optJSONObject("institutionLabel").getString("value") + " for cwid " + ob.getCwid().trim());
+						sb.setLength(0);
+						sb.append("PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>");
+						sb.append("WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n");
+						sb.append("DELETE { \n");
+						sb.append("<" + this.vivoNamespace + "org-" + instituteFk + "> rdfs:label ?institutionLabel .\n");
+						sb.append("} \n");
+						sb.append("INSERT { \n");
+						sb.append("<" + this.vivoNamespace + "org-" + instituteFk + "> rdfs:label \"" + edu.getInstituion() + "\" .\n");
+						sb.append("} \n");
+						sb.append("WHERE { \n");
+						sb.append("<" + this.vivoNamespace + "org-" + instituteFk + "> rdfs:label ?institutionLabel .\n");
+						sb.append("}");
+						
+						log.info(sb.toString());
+						response = this.vivoClient.vivoUpdateApi(sb.toString());
+						log.info(response);
+					} else	
 						log.info("No updates are necessary for " + ob.getCwid().trim() + " for educationalTraining-" + edu.getDegreePk().trim());
 				}
 				} catch(Exception e) {
