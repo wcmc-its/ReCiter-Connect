@@ -263,7 +263,7 @@ public class GrantsFetchFromED {
 			sb.append("<" + this.vivoNamespace + "grant-" + gb.getAwardNumber().trim() + "> core:dateTimeInterval ?dateTimeInterval . \n");
 			sb.append("}}");
 			
-			//log.info(sb.toString());
+			log.info(sb.toString());
 			if(ingestType.equals(IngestType.VIVO_API.toString())) {
 				try{
 					String response = vivoClient.vivoQueryApi(sb.toString());
@@ -1237,9 +1237,11 @@ public class GrantsFetchFromED {
 						sb.append("DELETE { \n");
 						sb.append("<" + entry.getValue() + "> core:relatedBy <" + this.vivoNamespace + "grant-" + grantid.trim() + "> . \n");
 						sb.append("<" + entry.getValue() + "> obo:RO_0000053 <" + entry.getKey() + "> . \n");
+						sb.append("<" + entry.getKey() + "> ?p ?o . \n");
 						sb.append("} WHERE { \n");
 						sb.append("<" + entry.getValue() + "> core:relatedBy <" + this.vivoNamespace + "grant-" + grantid.trim() + "> . \n");
 						sb.append("<" + entry.getValue() + "> obo:RO_0000053 <" + entry.getKey() + "> . \n");
+						sb.append("<" + entry.getKey() + "> ?p ?o . \n");
 						sb.append("}");
 
 						response = this.vivoClient.vivoUpdateApi(sb.toString());
