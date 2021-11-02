@@ -749,13 +749,15 @@ public class AppointmentsFetchFromED {
 				sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0000057 <" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> . \n");
 				sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0000057 <" + this.vivoNamespace + "org-" + edu.getInstituteFk().trim() + "> . \n");
 				sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> obo:RO_0002234 <" + this.vivoNamespace + "educationalTraining-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> . \n");
-				sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> . \n");
-				sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + strDate + "\" .\n");
-				sb.append("<" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> rdf:type core:DateTimeInterval . \n");
-				sb.append("<" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> core:end <" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> . \n");
-				sb.append("<" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> rdf:type core:DateTimeValue . \n");
-				sb.append("<" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> core:dateTimePrecision core:yearPrecision . \n");
-				sb.append("<" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> core:dateTime \"" + edu.getDateTimeInterval().trim() + "\" . \n");
+				if(!ob.getCwid().equalsIgnoreCase("jis2011")) {
+					sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:dateTimeInterval <" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> . \n");
+					sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> core:DateTimeValue \"" + strDate + "\" .\n");
+					sb.append("<" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> rdf:type core:DateTimeInterval . \n");
+					sb.append("<" + this.vivoNamespace + "dtinterval-" + edu.getDateTimeInterval().trim() + "> core:end <" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> . \n");
+					sb.append("<" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> rdf:type core:DateTimeValue . \n");
+					sb.append("<" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> core:dateTimePrecision core:yearPrecision . \n");
+					sb.append("<" + this.vivoNamespace + "date-" + edu.getDateTimeInterval().substring(2).trim() + "> core:dateTime \"" + edu.getDateTimeInterval().trim() + "\" . \n");
+				}
 				sb.append("<" + this.vivoNamespace + "educationalProcess-" + ob.getCwid().trim() + "-" + edu.getDegreePk().trim() + "> <http://vivo.ufl.edu/ontology/vivo-ufl/harvestedBy> \"wcmc-harvester\" . \n");
 				
 				
