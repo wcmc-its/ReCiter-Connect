@@ -1238,12 +1238,12 @@ public class AcademicFetchFromED {
 			String coi = null;
 			
 			StringBuilder selectQuery = new StringBuilder();
-			selectQuery.append("select p.cwid, \n");
-			selectQuery.append("case when conflicts is not null then conflicts else \"<div id='conflict-container'><p>No External Relationships Currently Reported</p></div>\" end as conflicts \n");
+			selectQuery.append("select distinct m.cwid, \n");
+			selectQuery.append("concat(conflicts,'</div>') \n");
 			selectQuery.append("from v_coi_vivo_activity_group m \n");
 			selectQuery.append("join  ( \n");
-			selectQuery.append("select z.cwid, concat(\"<div id='conflict-container'>\",group_concat(distinct activityGroupData separator ''),\"</div>\") as conflicts \n");
-			selectQuery.append("from (select cwid, concat(\"<div class='conflict'><span class='activity-group-label'>\",vivo_pops_activity_group,\": </span>\",\"<span class='activity-group-data'>\",replace(replace(group_concat(distinct entity order by entity separator '; '),\"(*)\",\"\"),\" ;\",\";\"),\"</span></div>\") as activityGroupData \n");
+			selectQuery.append("select z.cwid, concat(\"<p class='conflicts-explanation'>Relationships and collaborations with for-profit and not-for-profit organizations are of vital importance to our faculty because these exchanges of scientific information foster innovation. As experts in their fields, WCM physicians and scientists are sought after by many organizations to consult and educate. WCM and its faculty make this information available to the public, thus creating a transparent environment.</p><div id='grid-container'>\",group_concat(distinct activityGroupData separator ''),\"\") as conflicts \n");
+			selectQuery.append("from (select cwid, concat(\"<div class='conflicts-description'><div class='tooltip'><span id='tooltip-what'><img class='whatisthisquestion' src='/images/externalRelationshipInfoButton.png' width='20'></span><span class='tooltiptext'>\",description,\"</span>\",vivo_pops_activity_group,\":</div></div><div class='conflicts-list'>\",replace(replace(group_concat(distinct entity order by entity separator '; '),\"(*)\",\"\"),\" ;\",\";\"),\"</div>\") as activityGroupData \n");
 			selectQuery.append("from v_coi_vivo_activity_group \n");
 			selectQuery.append("where vivo_pops_activity_group is not null \n");
 			selectQuery.append("group by cwid, vivo_pops_activity_group) z \n");
