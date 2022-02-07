@@ -1229,6 +1229,33 @@ public class AcademicFetchFromED {
 				}
 			} else {
 				log.info("No external relationships exist for " + pb.getCwid());
+				log.info("Check to see if any existing external relationships needs to be deleted");
+				StringBuilder sb = new StringBuilder();
+				sb.append("WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n");
+				sb.append("DELETE { \n");
+				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> ?o .\n");
+				sb.append("} \n");
+				sb.append("WHERE { \n");
+				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> ?o .\n");
+				sb.append("}");
+				
+				log.info(sb.toString());
+				if(ingestType.equals(IngestType.VIVO_API.toString())) {
+					try {
+						log.info(this.vivoClient.vivoUpdateApi(sb.toString()));
+					} catch(Exception e) {
+						log.error("Api Exception", e);
+					}
+				} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+					TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
+					try {
+						runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
+					} catch(IOException e) {
+						log.error("IOException: ",e);
+					}
+					if(vivoJena!= null)
+						this.tcf.returnConnectionToPool(vivoJena, "dataSet");
+				}
 			}
 		}
 
