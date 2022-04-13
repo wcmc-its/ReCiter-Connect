@@ -194,7 +194,7 @@ public class AppointmentsFetchFromED {
 				}
 			
 			//Takes care of Douglas J. Ballon appointments
-			filter = "(&(ou=faculty)(objectClass=weillCornellEduSORRoleRecord)(weillCornellEduCWID=" + cwid + ")(weillCornellEduEndDate>=19991231050000Z)(!(|(weillCornellEduSORID=10085791)(weillCornellEduSORID=2318)(weillCornellEduSORID=10016608)(weillCornellEduSORID=3001124))))";
+			filter = "(&(ou=faculty)(objectClass=weillCornellEduSORRoleRecord)(weillCornellEduCWID=" + cwid + ")(weillCornellEduEndDate>=19991231050000Z)(!(|(weillCornellEduSORID=10085791)(weillCornellEduSORID=2318)(weillCornellEduSORID=10002523)(weillCornellEduSORID=10075683)(weillCornellEduSORID=10016608)(weillCornellEduSORID=3001124))))";
 			
 			
 			
