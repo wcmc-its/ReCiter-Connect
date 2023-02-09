@@ -182,6 +182,7 @@ public class GrantsFetchFromED {
 						}
 					} catch(Exception e) {
 						log.error("Api Exception", e);
+
 					}
 				} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
 					SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
@@ -206,6 +207,7 @@ public class GrantsFetchFromED {
 					} catch(IOException e) {
 						log.error("IOException" ,e);
 					}
+
 				} else {
 					TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
 					try {
@@ -1997,8 +1999,6 @@ public class GrantsFetchFromED {
 			selectQuery.append("ORDER BY v.CWID, v.Account_Number");				
 				
 			//log.info(selectQuery.toString());
-			
-			
 			
 				ps = this.infoEdCon.prepareStatement(selectQuery.toString());
 				rs = ps.executeQuery();

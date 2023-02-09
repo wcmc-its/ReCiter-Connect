@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StopWatch;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -36,11 +37,11 @@ public class ReCiterClient {
             .build())
             .retrieve()
             .onStatus(HttpStatus::is4xxClientError, clientResponse -> {
-                log.error("Error calling article retrieval api: " + clientResponse.statusCode().getReasonPhrase());
+                log.error("Error for uid " + uid + " calling article retrieval api: " + clientResponse.statusCode().getReasonPhrase());
                 return Mono.error(new ApiException(clientResponse.statusCode()));
             })
             .onStatus(HttpStatus::is5xxServerError, clientResponse -> {
-                log.error("Error calling article retrieval api: " + clientResponse.statusCode().getReasonPhrase());
+                log.error("Error for uid " + uid + " calling article retrieval api: " + clientResponse.statusCode().getReasonPhrase());
                 return Mono.error(new ApiException(clientResponse.statusCode()));
              })
             .bodyToMono(ArticleRetrievalModel.class);
@@ -54,7 +55,7 @@ public class ReCiterClient {
             .parallel()
             .runOn(Schedulers.elastic())
             .flatMap(this::getPublicationsByUid)
-            .doOnError(ex -> log.error("Encountered issue calling the api", ex.getMessage()))
+            .doOnError(ex -> log.error("Encountered issue", ex.getMessage() + " calling the api for uids: " + uids.toString()))
             .ordered((uid1, uid2) -> uid1.hashCode() - uid2.hashCode());
     }
 

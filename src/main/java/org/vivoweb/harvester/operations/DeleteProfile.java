@@ -15,24 +15,35 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Random;
+
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.openjena.atlas.logging.Log;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 import org.vivoweb.harvester.ingest.EdDataInterface;
 import org.vivoweb.harvester.ingest.EdDataInterfaceImpl;
 import org.vivoweb.harvester.util.repo.SDBJenaConnect;
 
+import lombok.extern.slf4j.Slf4j;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import org.apache.jena.query.QuerySolution;
 import org.apache.jena.query.ResultSet;
 
+import com.unboundid.ldap.sdk.LDAPConnection;
 import com.unboundid.ldap.sdk.SearchResultEntry;
 
 import reciter.connect.beans.vivo.delete.profile.PublicationBean;
 import reciter.connect.database.ldap.LDAPConnectionFactory;
 import reciter.connect.database.mysql.MysqlConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
+import reciter.connect.vivo.IngestType;
+import reciter.connect.vivo.api.client.VivoClient;
 
 
 
@@ -45,6 +56,7 @@ import reciter.connect.database.mysql.jena.JenaConnectionFactory;
  * Date - 10/24/2016
  *
  */
+@Component
 public class DeleteProfile {
 	
 	public static String propertyFilePath = null;
@@ -75,15 +87,17 @@ public class DeleteProfile {
 	/**
 	 * <i>This is a connection factory object to get ldap connection to Enterprise Directory</i>
 	 */
+	@Autowired
 	private LDAPConnectionFactory lcf;
 
 	@Autowired
 	private EdDataInterface edi;
+
+	private String ingestType = System.getenv("INGEST_TYPE");
+
+	@Autowired
+	private VivoClient vivoClient;
 	
-	/**
-	 * <i> Connection factory object to get connections to PubAdmin </i>
-	 */
-	private MysqlConnectionFactory mcf;
 	
 	/**
 	 * SLF4J Logger
@@ -99,36 +113,55 @@ public class DeleteProfile {
 		
 		StringBuilder sb = new StringBuilder();
 		sb.append("SELECT distinct ?grant ?role \n");
-		sb.append("from <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> \n");
 		sb.append("WHERE { \n");
+		sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcCoeus> {\n");
 		sb.append("<" + this.vivoNamespace + "cwid-" + cwid +"> <http://purl.obolibrary.org/obo/RO_0000053> ?role . \n");
 		sb.append("?role <http://vivoweb.org/ontology/core#relatedBy> ?grant . \n");
-		sb.append("}");
+		sb.append("}}");
 		
 		
+		if(ingestType.equals(IngestType.VIVO_API.toString())) {
+			try {
+				String response = this.vivoClient.vivoQueryApi(sb.toString());
+				logger.info(response);
+				JSONObject obj = new JSONObject(response);
+				JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+				if(bindings != null && !bindings.isEmpty()) {
+					for (int i = 0; i < bindings.length(); ++i) {
+						if(bindings.getJSONObject(i).optJSONObject("grant") != null && bindings.getJSONObject(i).optJSONObject("grant").has("value")
+						&&
+						bindings.getJSONObject(i).optJSONObject("role") != null && bindings.getJSONObject(i).optJSONObject("role").has("value")) {
+							grants.put("<" + bindings.getJSONObject(i).getJSONObject("grant").getString("value") + ">", "<" + bindings.getJSONObject(i).getJSONObject("role").getString("value") + ">");
+						}
+					}
+				}
+			} catch(Exception e) {
+				logger.error("Api Exception", e);
+			}
+		} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
 		
-		
-		SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcCoeus");
-		ResultSet rs = null;
-		try {
-			rs = vivoJena.executeSelectQuery(sb.toString());
-		
-		logger.info("Grant List for cwid " + cwid);
-		while(rs.hasNext())
-		{
-			QuerySolution qs =rs.nextSolution();
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+			ResultSet rs = null;
+			try {
+				rs = vivoJena.executeSelectQuery(sb.toString(), true);
 			
-			logger.info("Grant - " + qs.get("grant").toString() + " Role - " + qs.get("role").toString());
-			if(qs.get("grant") != null && qs.get("role") != null) 
-				grants.put("<" + qs.get("grant").toString() + ">", "<" + qs.get("role").toString() + ">");
-			
-			//logger.info("Grant - " + qs.get("grant").toString() + " with role " +  qs.get("role").toString());
-			
+			logger.info("Grant List for cwid " + cwid);
+			while(rs.hasNext())
+			{
+				QuerySolution qs =rs.nextSolution();
+				
+				logger.info("Grant - " + qs.get("grant").toString() + " Role - " + qs.get("role").toString());
+				if(qs.get("grant") != null && qs.get("role") != null) 
+					grants.put("<" + qs.get("grant").toString() + ">", "<" + qs.get("role").toString() + ">");
+				
+				//logger.info("Grant - " + qs.get("grant").toString() + " with role " +  qs.get("role").toString());
+				
+			}
+			} catch(IOException e) {
+				logger.error("Error Connecting to Jena Database" , e);
+			}
+			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 		}
-		} catch(IOException e) {
-			logger.error("Error Connecting to Jena Database" , e);
-		}
-		this.jcf.returnConnectionToPool(vivoJena, "wcmcCoeus");
 		
 		
 	}
@@ -146,41 +179,64 @@ public class DeleteProfile {
 			 "PREFIX bibo: <http://purl.org/ontology/bibo/> \n" +
 			 "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" + 
 			 "SELECT distinct ?pub ?Authorship \n" +
-			 "from <http://vitro.mannlib.cornell.edu/a/graph/wcmcPublications> \n" +
 			 "WHERE { \n"+
+			 "GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPublications> {\n" +
 			 "<" + this.vivoNamespace + "cwid-" + cwid +"> ?p ?Authorship . \n" +
 			 "?Authorship vivo:relates ?pub . \n" +
 			 "?pub rdf:type bibo:Document . \n" +
 			 "FILTER(!REGEX(STR(?pub),\"http://xmlns.com/foaf/0.1/Person\",\"i\")) \n" +
-			 "}";
-		//logger.info(sparqlQuery);
+			 "}}";
 		
-		
-		SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcPublications");
-		ResultSet rs;
-		try {
-			rs = vivoJena.executeSelectQuery(sparqlQuery);
-		
-		logger.info("Publication list for cwid " + cwid);
-		while(rs.hasNext())
-		{
-			QuerySolution qs =rs.nextSolution();
-			PublicationBean pb = new PublicationBean();
-			if(qs.get("pub") != null) {
-				pb.setPubUrl(qs.get("pub").toString());
+		if(ingestType.equals(IngestType.VIVO_API.toString())) {
+			try {
+				String response = this.vivoClient.vivoQueryApi(sparqlQuery);
+				logger.info(response);
+				JSONObject obj = new JSONObject(response);
+				JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+				if(bindings != null && !bindings.isEmpty()) {
+					for (int i = 0; i < bindings.length(); ++i) {
+						PublicationBean pb = new PublicationBean();
+						if(bindings.getJSONObject(i).optJSONObject("pub") != null && bindings.getJSONObject(i).optJSONObject("pub").has("value")) {
+							pb.setPubUrl(bindings.getJSONObject(i).getJSONObject("pub").getString("value"));
+						}
+						if(bindings.getJSONObject(i).optJSONObject("Authorship") != null && bindings.getJSONObject(i).optJSONObject("Authorship").has("value")) {
+							pb.setAuthorshipUrl(bindings.getJSONObject(i).getJSONObject("Authorship").getString("value"));
+						}
+						pb.setAuthorUrl(this.vivoNamespace + "cwid-" + cwid.trim());
+						publications.add(pb);
+					}
+				}
+			} catch(Exception e) {
+				logger.error("Api Exception", e);
 			}
-			if(qs.get("Authorship") != null) {
-				pb.setAuthorshipUrl(qs.get("Authorship").toString());
-			}
-			pb.setAuthorUrl(this.vivoNamespace + "cwid-" + cwid.trim());
-			publications.add(pb);
+		} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+		
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+			ResultSet rs;
+			try {
+				rs = vivoJena.executeSelectQuery(sparqlQuery, true);
 			
-			logger.info("Publication URI - " + pb.getPubUrl());
+			logger.info("Publication list for cwid " + cwid);
+			while(rs.hasNext())
+			{
+				QuerySolution qs =rs.nextSolution();
+				PublicationBean pb = new PublicationBean();
+				if(qs.get("pub") != null) {
+					pb.setPubUrl(qs.get("pub").toString());
+				}
+				if(qs.get("Authorship") != null) {
+					pb.setAuthorshipUrl(qs.get("Authorship").toString());
+				}
+				pb.setAuthorUrl(this.vivoNamespace + "cwid-" + cwid.trim());
+				publications.add(pb);
+				
+				logger.info("Publication URI - " + pb.getPubUrl());
+			}
+			} catch(IOException e) {
+				logger.error("Error Connecting to Jena Database" , e);
+			}
+			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 		}
-		} catch(IOException e) {
-			logger.error("Error Connecting to Jena Database" , e);
-		}
-		this.jcf.returnConnectionToPool(vivoJena, "wcmcPublications");
 		
 		
 		
@@ -200,27 +256,44 @@ public class DeleteProfile {
 			String sparqlQuery = "PREFIX vivo: <http://vivoweb.org/ontology/core#> \n" + 
 				 "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" + 
 				 "SELECT (count(?AuthorCount) as ?count) \n" +
-				 "from <http://vitro.mannlib.cornell.edu/a/graph/wcmcPublications> \n" +
 				 "WHERE { \n"+
+				 "GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPublications> {\n" +
 				 "<" + pub.getPubUrl() + "> vivo:relatedBy ?authors . \n" +
 				 "?authors vivo:relates ?AuthorCount . \n" +
 				 "FILTER(REGEX(STR(?AuthorCount),\"cwid\",\"i\")) \n" +
-				 "}";
+				 "}}";
 			
-			
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcPublications");
-			ResultSet rs;
-			try {
-				rs = vivoJena.executeSelectQuery(sparqlQuery);
-				int count = Integer.parseInt(rs.nextSolution().get("count").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
-				if(count <= 1) 
-					pub.setAdditionalWcmcAuthorFlag(false);
-				else
-					pub.setAdditionalWcmcAuthorFlag(true);
-			} catch(IOException e) {
-				logger.error("Error Connecting to Jena Database" , e);
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				try {
+					String response = this.vivoClient.vivoQueryApi(sparqlQuery);
+					logger.info(response);
+					JSONObject obj = new JSONObject(response);
+					JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+					if(bindings != null && !bindings.isEmpty()) {
+						int count = bindings.getJSONObject(0).getJSONObject("count").getInt("value");
+						if(count <= 1) 
+							pub.setAdditionalWcmcAuthorFlag(false);
+						else
+							pub.setAdditionalWcmcAuthorFlag(true);
+					}
+				} catch(Exception e) {
+					logger.error("Api Exception", e);
+				}
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+				ResultSet rs;
+				try {
+					rs = vivoJena.executeSelectQuery(sparqlQuery, true);
+					int count = Integer.parseInt(rs.nextSolution().get("count").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
+					if(count <= 1) 
+						pub.setAdditionalWcmcAuthorFlag(false);
+					else
+						pub.setAdditionalWcmcAuthorFlag(true);
+				} catch(IOException e) {
+					logger.error("Error Connecting to Jena Database" , e);
+				}
+				this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			}
-			this.jcf.returnConnectionToPool(vivoJena, "wcmcPublications");
 			
 			
 		}
@@ -239,11 +312,12 @@ public class DeleteProfile {
 	 */
 	private void deleteProfile(String cwid, List<PublicationBean> publications, Map<String, String> grants) throws IOException {
 		String sparql = null;
-		
-		
 		SDBJenaConnect vivoJena = null;
+		
+		if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+			vivoJena = this.jcf.getConnectionfromPool("dataSet");
+		}
 
-			
 			// Delete from People Graph
 			logger.info("Deleting profile in People graph for " + cwid );
 			sparql = "WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n" +
@@ -261,9 +335,12 @@ public class DeleteProfile {
 				"OPTIONAL { <" + this.vivoNamespace + "hasEmail-" + cwid + "> ?p ?o . }\n" +
 				"OPTIONAL { <" + this.vivoNamespace + "arg2000028-" + cwid + "> ?p ?o . }\n" +
 				"}";
-			
-			vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
-			vivoJena.executeUpdateQuery(sparql, true);
+
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				logger.info(this.vivoClient.vivoUpdateApi(sparql));
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				vivoJena.executeUpdateQuery(sparql, true);
+			}
 			
 			
 			logger.info("Deleting inference triples in People graph for " + cwid );
@@ -273,8 +350,11 @@ public class DeleteProfile {
 				 "} WHERE { \n" +
 				 "OPTIONAL {?s ?p <" + this.vivoNamespace + "cwid-" + cwid + "> . }\n" +
 				 "}";
-			vivoJena.executeUpdateQuery(sparql, true);
-			this.jcf.returnConnectionToPool(vivoJena, "wcmcPeople");
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				logger.info(this.vivoClient.vivoUpdateApi(sparql));
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				vivoJena.executeUpdateQuery(sparql, true);
+			}
 			
 			//Deleting from Ofa graph
 			
@@ -287,8 +367,11 @@ public class DeleteProfile {
 				"<" + this.vivoNamespace + "cwid-" + cwid + "> <http://vivoweb.org/ontology/core#relatedBy> ?position . \n" +
 				"OPTIONAL {?position ?positionpred ?positionobj . }\n" +
 				"}";
-			vivoJena = this.jcf.getConnectionfromPool("wcmcOfa");
-			vivoJena.executeUpdateQuery(sparql, true);
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				logger.info(this.vivoClient.vivoUpdateApi(sparql));
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				vivoJena.executeUpdateQuery(sparql, true);
+			}
 			
 			logger.info("Deleting profile in Ofa graph for " + cwid );
 			sparql = "WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> \n" +
@@ -298,8 +381,11 @@ public class DeleteProfile {
 				"<" + this.vivoNamespace + "cwid-" + cwid + "> ?p ?o . \n" +
 				"}";
 			
-			vivoJena.executeUpdateQuery(sparql, true);
-			this.jcf.returnConnectionToPool(vivoJena, "wcmcOfa");
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				logger.info(this.vivoClient.vivoUpdateApi(sparql));
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				vivoJena.executeUpdateQuery(sparql, true);
+			}
 			
 			//Deleting from kb-2 graph
 			logger.info("Deleting profile in kb-2 graph for " + cwid );
@@ -309,8 +395,11 @@ public class DeleteProfile {
 				"} WHERE { \n" +
 				"OPTIONAL {<" + this.vivoNamespace + "cwid-" + cwid + "> ?p ?o .}\n" +
 				"}";
-			vivoJena = this.jcf.getConnectionfromPool("vitro-kb-2");
-			vivoJena.executeUpdateQuery(sparql, true);
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				logger.info(this.vivoClient.vivoUpdateApi(sparql));
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				vivoJena.executeUpdateQuery(sparql, true);
+			}
 			
 			logger.info("Deleting inference triples in kb-2 graph for " + cwid );
 			sparql = "WITH <http://vitro.mannlib.cornell.edu/default/vitro-kb-2> \n" +
@@ -319,54 +408,109 @@ public class DeleteProfile {
 				 "} WHERE { \n" +
 				 "OPTIONAL {?s ?p <" + this.vivoNamespace + "cwid-" + cwid + "> . }\n" +
 				 "}";
-			vivoJena.executeUpdateQuery(sparql, true);
+
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				logger.info(this.vivoClient.vivoUpdateApi(sparql));
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				vivoJena.executeUpdateQuery(sparql, true);
+			}
 			
 			logger.info("Deleting manually added triples from kb-2 graph for " + cwid);
 			sparql = "SELECT ?obj \n" +
-					 "from <http://vitro.mannlib.cornell.edu/default/vitro-kb-2> \n" +
-					 "{ \n" +
+					 "WHERE { \n" +
+					 "GRAPH <http://vitro.mannlib.cornell.edu/default/vitro-kb-2> {\n" +
 					 "<" + this.vivoNamespace + "cwid-" + cwid + "> <http://vivoweb.org/ontology/core#relatedBy> ?obj . \n" +
-					 "}";
-			ResultSet rs = vivoJena.executeSelectQuery(sparql);
-			while(rs.hasNext())
-			{
-				QuerySolution qs =rs.nextSolution();
-				if(qs.get("obj") != null) {
-					String manual = qs.get("obj").toString().trim();
-					
-					sparql = "WITH <http://vitro.mannlib.cornell.edu/default/vitro-kb-2> \n" +
-						"DELETE { \n" +
-						"<" + manual + "> ?p ?o . \n" +
-						"} WHERE { \n" +
-						"<" + manual + "> ?p ?o . \n" +
-						"}";
-					vivoJena.executeUpdateQuery(sparql, true);	
-				}	
+					 "}}";
+			
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				try {
+					String response = this.vivoClient.vivoQueryApi(sparql);
+					logger.info(response);
+					JSONObject obj = new JSONObject(response);
+					JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+					if(bindings != null && !bindings.isEmpty()) {
+						for (int i = 0; i < bindings.length(); ++i) {
+							if(bindings.getJSONObject(i).optJSONObject("obj") != null && bindings.getJSONObject(i).optJSONObject("obj").has("value")) {
+								String manual = bindings.getJSONObject(i).getJSONObject("obj").getString("value");
+								sparql = "WITH <http://vitro.mannlib.cornell.edu/default/vitro-kb-2> \n" +
+								"DELETE { \n" +
+								"<" + manual + "> ?p ?o . \n" +
+								"} WHERE { \n" +
+								"<" + manual + "> ?p ?o . \n" +
+								"}";
+								logger.info(this.vivoClient.vivoUpdateApi(sparql));
+							}
+						}
+					}
+				} catch(Exception e) {
+					logger.error("Api Exception", e);
+				}
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				ResultSet rs = vivoJena.executeSelectQuery(sparql, true);
+				while(rs.hasNext())
+				{
+					QuerySolution qs =rs.nextSolution();
+					if(qs.get("obj") != null) {
+						String manual = qs.get("obj").toString().trim();
+						
+						sparql = "WITH <http://vitro.mannlib.cornell.edu/default/vitro-kb-2> \n" +
+							"DELETE { \n" +
+							"<" + manual + "> ?p ?o . \n" +
+							"} WHERE { \n" +
+							"<" + manual + "> ?p ?o . \n" +
+							"}";
+						vivoJena.executeUpdateQuery(sparql, true);	
+					}	
+				}
 			}
 			
 			sparql = "SELECT ?obj \n" +
-				 "from <http://vitro.mannlib.cornell.edu/default/vitro-kb-2> \n" +
-				 "{ \n" +
+				 "WHERE { \n" +
+				 "GRAPH <http://vitro.mannlib.cornell.edu/default/vitro-kb-2> {\n" +
 				 "<" + this.vivoNamespace + "cwid-" + cwid + "> <http://vitro.mannlib.cornell.edu/ns/vitro/public#mainImage> ?obj . \n" +
-				 "}";
-			 rs = vivoJena.executeSelectQuery(sparql);
-			while(rs.hasNext())
-			{
-				QuerySolution qs =rs.nextSolution();
-				if(qs.get("obj") != null) {
-					String manual = qs.get("obj").toString().trim();
-					
-					sparql = "WITH <http://vitro.mannlib.cornell.edu/default/vitro-kb-2> \n" +
-						"DELETE { \n" +
-						"<" + manual + "> ?p ?o . \n" +
-						"} WHERE { \n" +
-						"<" + manual + "> ?p ?o . \n" +
-						"}";
-					vivoJena.executeUpdateQuery(sparql, true);	
-				}	
+				 "}}";
+			
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				try {
+					String response = this.vivoClient.vivoQueryApi(sparql);
+					logger.info(response);
+					JSONObject obj = new JSONObject(response);
+					JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+					if(bindings != null && !bindings.isEmpty()) {
+						for (int i = 0; i < bindings.length(); ++i) {
+							if(bindings.getJSONObject(i).optJSONObject("obj") != null && bindings.getJSONObject(i).optJSONObject("obj").has("value")) {
+								String manual = bindings.getJSONObject(i).getJSONObject("obj").getString("value");
+								sparql = "WITH <http://vitro.mannlib.cornell.edu/default/vitro-kb-2> \n" +
+								"DELETE { \n" +
+								"<" + manual + "> ?p ?o . \n" +
+								"} WHERE { \n" +
+								"<" + manual + "> ?p ?o . \n" +
+								"}";
+								logger.info(this.vivoClient.vivoUpdateApi(sparql));
+							}
+						}
+					}
+				} catch(Exception e) {
+					logger.error("Api Exception", e);
+				}
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				ResultSet rs = vivoJena.executeSelectQuery(sparql, true);
+				while(rs.hasNext())
+				{
+					QuerySolution qs =rs.nextSolution();
+					if(qs.get("obj") != null) {
+						String manual = qs.get("obj").toString().trim();
+						
+						sparql = "WITH <http://vitro.mannlib.cornell.edu/default/vitro-kb-2> \n" +
+							"DELETE { \n" +
+							"<" + manual + "> ?p ?o . \n" +
+							"} WHERE { \n" +
+							"<" + manual + "> ?p ?o . \n" +
+							"}";
+						vivoJena.executeUpdateQuery(sparql, true);	
+					}	
+				}
 			}
-				
-			this.jcf.returnConnectionToPool(vivoJena, "vitro-kb-2");
 			
 			logger.info("Deleting profile in inference graph for " + cwid );
 			sparql = "WITH <http://vitro.mannlib.cornell.edu/default/vitro-kb-inf> \n" +
@@ -375,8 +519,11 @@ public class DeleteProfile {
 				"} WHERE { \n" +
 				"OPTIONAL {<" + this.vivoNamespace + "cwid-" + cwid + "> ?p ?o .}\n" +
 				"}";
-			vivoJena = this.jcf.getConnectionfromPool("vitro-kb-inf");
-			vivoJena.executeUpdateQuery(sparql, true);
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				logger.info(this.vivoClient.vivoUpdateApi(sparql));
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				vivoJena.executeUpdateQuery(sparql, true);
+			}
 			
 			logger.info("Deleting inference triples in kb-inf graph for " + cwid );
 			sparql = "WITH <http://vitro.mannlib.cornell.edu/default/vitro-kb-inf> \n" +
@@ -386,8 +533,11 @@ public class DeleteProfile {
 				 "OPTIONAL {?s ?p <" + this.vivoNamespace + "cwid-" + cwid + "> .} \n" +
 				 "}";
 			
-			vivoJena.executeUpdateQuery(sparql, true);
-			this.jcf.returnConnectionToPool(vivoJena, "vitro-kb-inf");
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				logger.info(this.vivoClient.vivoUpdateApi(sparql));
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				vivoJena.executeUpdateQuery(sparql, true);
+			}
 		
 		if(publications != null && !publications.isEmpty()) {
 		
@@ -406,10 +556,11 @@ public class DeleteProfile {
 									"<" + pub.getPubUrl().trim() + ">  ?p ?o .\n" +
 									"OPTIONAL { <" + this.vivoNamespace + "citation-" + pub.getPubUrl().trim().replace(this.vivoNamespace, "") + "> ?p1 ?o1 .}\n" +
 									"}";
-					
-					
-					vivoJena = this.jcf.getConnectionfromPool("wcmcPublications");
-					vivoJena.executeUpdateQuery(sparql, true);
+					if(ingestType.equals(IngestType.VIVO_API.toString())) {
+						logger.info(this.vivoClient.vivoUpdateApi(sparql));
+					} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+						vivoJena.executeUpdateQuery(sparql, true);
+					}
 					
 					sparql = "WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPublications> \n" +
 						"DELETE { \n" +
@@ -417,8 +568,11 @@ public class DeleteProfile {
 						"} WHERE { \n" +
 						"OPTIONAL {?s ?p <" +pub.getPubUrl().trim() + "> .}\n" +
 						"}";
-					vivoJena.executeUpdateQuery(sparql, true);
-					this.jcf.returnConnectionToPool(vivoJena, "wcmcPublications");
+					if(ingestType.equals(IngestType.VIVO_API.toString())) {
+						logger.info(this.vivoClient.vivoUpdateApi(sparql));
+					} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+						vivoJena.executeUpdateQuery(sparql, true);
+					}
 					
 					sparql = "WITH <http://vitro.mannlib.cornell.edu/default/vitro-kb-inf> \n" +
 						"DELETE { \n" +
@@ -426,9 +580,11 @@ public class DeleteProfile {
 						"} WHERE { \n" +
 						"<" + pub.getPubUrl().trim() + ">  ?p ?o . \n" +
 						"}";
-					vivoJena = this.jcf.getConnectionfromPool("vitro-kb-inf");
-					vivoJena.executeUpdateQuery(sparql, true);
-					this.jcf.returnConnectionToPool(vivoJena, "vitro-kb-inf");
+					if(ingestType.equals(IngestType.VIVO_API.toString())) {
+						logger.info(this.vivoClient.vivoUpdateApi(sparql));
+					} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+						vivoJena.executeUpdateQuery(sparql, true);
+					}
 				}
 			}
 				
@@ -439,8 +595,11 @@ public class DeleteProfile {
 				"} WHERE { \n" +
 				"<" + this.vivoNamespace + "cwid-" + cwid + "> ?p ?o . \n" +
 				"}";
-			vivoJena = this.jcf.getConnectionfromPool("wcmcPublications");
-			vivoJena.executeUpdateQuery(sparql, true);
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				logger.info(this.vivoClient.vivoUpdateApi(sparql));
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				vivoJena.executeUpdateQuery(sparql, true);
+			}
 			
 			
 			
@@ -451,8 +610,11 @@ public class DeleteProfile {
 				 "} WHERE { \n" +
 				 "OPTIONAL {?s ?p <" + this.vivoNamespace + "cwid-" + cwid + "> .}\n" +
 				"}";
-			vivoJena.executeUpdateQuery(sparql, true);
-			this.jcf.returnConnectionToPool(vivoJena, "wcmcPublications");
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				logger.info(this.vivoClient.vivoUpdateApi(sparql));
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				vivoJena.executeUpdateQuery(sparql, true);
+			}
 		}
 		
 		if(!grants.isEmpty()) {
@@ -462,7 +624,6 @@ public class DeleteProfile {
 			String role;
 			int count = 0;
 			StringBuilder sb = new StringBuilder();
-			vivoJena = this.jcf.getConnectionfromPool("wcmcCoeus");
 			if(grants.size() > 5) {
 				Iterator<Entry<String, String>> it = grants.entrySet().iterator();
 				while(it.hasNext()) {
@@ -483,7 +644,11 @@ public class DeleteProfile {
 					sb.append("OPTIONAL { " + role + " ?p ?o . }\n");
 					sb.append("}");
 					
-					vivoJena.executeUpdateQuery(sb.toString(), true);
+					if(ingestType.equals(IngestType.VIVO_API.toString())) {
+						logger.info(this.vivoClient.vivoUpdateApi(sb.toString()));
+					} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+						vivoJena.executeUpdateQuery(sb.toString(), true);
+					}
 					sb.setLength(0);
 					
 				}
@@ -522,14 +687,16 @@ public class DeleteProfile {
 				}
 				sb.append("}");
 				
-				vivoJena.executeUpdateQuery(sb.toString(), true);
+				if(ingestType.equals(IngestType.VIVO_API.toString())) {
+					logger.info(this.vivoClient.vivoUpdateApi(sb.toString()));
+				} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+					vivoJena.executeUpdateQuery(sb.toString(), true);
+				}
 				
 			}
-			this.jcf.returnConnectionToPool(vivoJena, "wcmcCoeus");
 			
 			sb.setLength(0);
 			logger.info("Deleting inference triples for grants");
-			vivoJena = this.jcf.getConnectionfromPool("vitro-kb-inf");
 			if(grants.size() > 5) {
 				Iterator<Entry<String, String>> it = grants.entrySet().iterator();
 				while(it.hasNext()) {
@@ -544,7 +711,11 @@ public class DeleteProfile {
 					sb.append("OPTIONAL { " + role + " ?p ?o . }\n");
 					sb.append("}");
 					
-					vivoJena.executeUpdateQuery(sb.toString(), true);
+					if(ingestType.equals(IngestType.VIVO_API.toString())) {
+						logger.info(this.vivoClient.vivoUpdateApi(sb.toString()));
+					} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+						vivoJena.executeUpdateQuery(sb.toString(), true);
+					}
 					sb.setLength(0);
 					
 					
@@ -575,15 +746,17 @@ public class DeleteProfile {
 				}
 				sb.append("}");
 				
-				vivoJena.executeUpdateQuery(sb.toString(), true);
+				if(ingestType.equals(IngestType.VIVO_API.toString())) {
+					logger.info(this.vivoClient.vivoUpdateApi(sb.toString()));
+				} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+					vivoJena.executeUpdateQuery(sb.toString(), true);
+				}
 				
-			}
-			this.jcf.returnConnectionToPool(vivoJena, "vitro-kb-inf");
-			
-			
+			}	
 		}
-			
-			
+		if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+		}
 		
 	}
 	
@@ -593,51 +766,54 @@ public class DeleteProfile {
 	 * This function checks for a supplied cwid whether the person is active in ED or not
 	 */
 	public boolean checkForInActivePeopleEd(String cwid) {
-		
 		boolean isActive = false;
+		LDAPConnection connection = this.lcf.getConnectionfromPool();
+		if(connection != null) {
+			this.lcf.returnConnectionToPool(connection);
+			List<SearchResultEntry> results = this.lcf.searchWithBaseDN("(&(objectClass=eduPerson)(weillCornellEduCWID=" + cwid + "))", "ou=people,dc=weill,dc=cornell,dc=edu");
 		
-		List<SearchResultEntry> results = this.lcf.searchWithBaseDN("(&(objectClass=eduPerson)(weillCornellEduCWID=" + cwid + "))", "ou=people,dc=weill,dc=cornell,dc=edu");
-	
-		if (results.size() == 1) {
-			SearchResultEntry entry = results.get(0);
-			if(entry.getAttributeValue("weillCornellEduCWID") != null) {
-				if(entry.getAttributeValues("weillCornellEduPersonTypeCode") != null) {
-					 String personType[] = new String[entry.getAttributeValues("weillCornellEduPersonTypeCode").length];
-					 personType = entry.getAttributeValues("weillCornellEduPersonTypeCode");
-					 List<String> ptypes = Arrays.asList(personType);
-					 if(ptypes.contains("academic")) 
-						 isActive = true;
-					 else
-						 isActive = false;
+			if (results.size() == 1) {
+				SearchResultEntry entry = results.get(0);
+				if(entry.getAttributeValue("weillCornellEduCWID") != null) {
+					if(entry.getAttributeValues("weillCornellEduPersonTypeCode") != null) {
+						String personType[] = new String[entry.getAttributeValues("weillCornellEduPersonTypeCode").length];
+						personType = entry.getAttributeValues("weillCornellEduPersonTypeCode");
+						List<String> ptypes = Arrays.asList(personType);
+						if(ptypes.contains("academic")) 
+							isActive = true;
+						else
+							isActive = false;
+					}
+					else
+						isActive = false;
+					
+					if(entry.getAttributeValue("sn") !=null ) 
+						this.familyName = StringEscapeUtils.escapeJava(entry.getAttributeValue("sn"));
+					
+					if(entry.getAttributeValue("givenName") !=null )
+						this.givenName = StringEscapeUtils.escapeJava(entry.getAttributeValue("givenName"));
+					
+					if(entry.getAttributeValue("weillCornellEduMiddleName") != null)
+						this.middleName = " " + StringEscapeUtils.escapeJava(entry.getAttributeValue("weillCornellEduMiddleName")) + " ";
+					else
+						this.middleName= " ";
+					
+					//logger.info(entry.toLDIFString());
+
 				}
 				else
 					isActive = false;
 				
-				if(entry.getAttributeValue("sn") !=null ) 
-					this.familyName = StringEscapeUtils.escapeJava(entry.getAttributeValue("sn"));
-				
-				if(entry.getAttributeValue("givenName") !=null )
-					this.givenName = StringEscapeUtils.escapeJava(entry.getAttributeValue("givenName"));
-				
-				if(entry.getAttributeValue("weillCornellEduMiddleName") != null)
-					this.middleName = " " + StringEscapeUtils.escapeJava(entry.getAttributeValue("weillCornellEduMiddleName")) + " ";
-				else
-					this.middleName= " ";
-				
-				//logger.info(entry.toLDIFString());
-
 			}
 			else
 				isActive = false;
 			
-		}
-		else
-			isActive = false;
-		
-		if(isActive==false) {
-			if(this.givenName == null && this.familyName == null)
-			getNamesFromVivo(cwid);
-		}
+			if(isActive==false) {
+				if(this.givenName == null && this.familyName == null)
+				getNamesFromVivo(cwid);
+			}
+		} else 
+			isActive = true;
 		return isActive;
 	}
 	
@@ -647,52 +823,84 @@ public class DeleteProfile {
 	 */
 	private void getNamesFromVivo(String cwid) {
 		String sparqlQuery = "SELECT ?givenName ?familyName \n" +
-			 "from <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n" +
 			 "WHERE { \n" +
+			 "GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> {\n" +
 			 "<" + this.vivoNamespace + "hasName-" + cwid.trim() + "> <http://www.w3.org/2006/vcard/ns#givenName> ?givenName . \n" +
 			 "<" + this.vivoNamespace + "hasName-" + cwid.trim() + "> <http://www.w3.org/2006/vcard/ns#familyName> ?familyName . \n" +
-			 "}";
+			 "}}";
 		
-		
-		SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
-		ResultSet rs;
-		
-		try {
-			rs = vivoJena.executeSelectQuery(sparqlQuery);
-			if(rs != null && rs.hasNext()) {
-				QuerySolution qs = rs.nextSolution();
-				this.givenName = qs.get("givenName").toString().trim();
-				this.familyName = qs.get("familyName").toString().trim();
+		if(ingestType.equals(IngestType.VIVO_API.toString())) {
+			String response = vivoClient.vivoQueryApi(sparqlQuery);
+			logger.info(response);
+			JSONObject obj = new JSONObject(response);
+			JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+			if(bindings != null && !bindings.isEmpty()) {
+				if(bindings.getJSONObject(0).optJSONObject("givenName") != null && bindings.getJSONObject(0).optJSONObject("givenName").has("value")
+				&&
+				bindings.getJSONObject(0).optJSONObject("familyName") != null && bindings.getJSONObject(0).optJSONObject("familyName").has("value")) {
+					this.givenName = bindings.getJSONObject(0).getJSONObject("givenName").getString("value");
+					this.familyName = bindings.getJSONObject(0).getJSONObject("familyName").getString("value");
+				}
+				
 			}
-		} catch(IOException e) {
-		logger.error("Error connecting to Jena Database" , e);
-		}
-		this.jcf.returnConnectionToPool(vivoJena, "wcmcPeople");
+		} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
 		
-		if(this.givenName==null && this.familyName==null) {
-			sparqlQuery = "SELECT ?label \n" +
-				 "from <http://vitro.mannlib.cornell.edu/default/vitro-kb-2> \n" +
-				 "WHERE { \n" +
-				 "<" + this.vivoNamespace + "cwid-" + cwid.trim() + "> <http://www.w3.org/2000/01/rdf-schema#label> ?label . \n" +
-				 "}";
-			
-			
-			vivoJena = this.jcf.getConnectionfromPool("vitro-kb-2");
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+			ResultSet rs;
 			
 			try {
-				rs = vivoJena.executeSelectQuery(sparqlQuery);
+				rs = vivoJena.executeSelectQuery(sparqlQuery, true);
 				if(rs != null && rs.hasNext()) {
 					QuerySolution qs = rs.nextSolution();
-					String label = qs.get("label").toString().replace("@en-us", "").replace("\"", "").trim();
-					String[] splitLabel = label.split(",");
-					
-					this.givenName = splitLabel[0].trim();
-					this.familyName = splitLabel[1].trim();
+					this.givenName = qs.get("givenName").toString().trim();
+					this.familyName = qs.get("familyName").toString().trim();
 				}
 			} catch(IOException e) {
 			logger.error("Error connecting to Jena Database" , e);
 			}
-			this.jcf.returnConnectionToPool(vivoJena, "vitro-kb-2");
+			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+		}
+		
+		if(this.givenName==null && this.familyName==null) {
+			sparqlQuery = "SELECT ?label \n" +
+				 "WHERE { \n" +
+				 "GRAPH <http://vitro.mannlib.cornell.edu/default/vitro-kb-2> {\n" +
+				 "<" + this.vivoNamespace + "cwid-" + cwid.trim() + "> <http://www.w3.org/2000/01/rdf-schema#label> ?label . \n" +
+				 "}}";
+			
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				String response = vivoClient.vivoQueryApi(sparqlQuery);
+				logger.info(response);
+				JSONObject obj = new JSONObject(response);
+				JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+				if(bindings != null && !bindings.isEmpty()) {
+					if(bindings.getJSONObject(0).optJSONObject("label") != null && bindings.getJSONObject(0).optJSONObject("label").has("value")) {
+						String label =bindings.getJSONObject(0).getJSONObject("label").getString("value").replace("@en-us", "").replace("\"", "").trim();
+						String[] splitLabel = label.split(",");
+						this.givenName = splitLabel[0].trim();
+						this.familyName = splitLabel[1].trim();
+					}
+					
+				}
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+			
+				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+				
+				try {
+					ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery, true);
+					if(rs != null && rs.hasNext()) {
+						QuerySolution qs = rs.nextSolution();
+						String label = qs.get("label").toString().replace("@en-us", "").replace("\"", "").trim();
+						String[] splitLabel = label.split(",");
+						
+						this.givenName = splitLabel[0].trim();
+						this.familyName = splitLabel[1].trim();
+					}
+				} catch(IOException e) {
+				logger.error("Error connecting to Jena Database" , e);
+				}
+				this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+			}
 		}
 		
 	}
@@ -705,19 +913,19 @@ public class DeleteProfile {
 	private boolean isNotInVivo(String newUri) {
 		boolean inVivo = false;
 		String sparqlQuery = "SELECT (count(?s) as ?count) \n" +
-			 "from <http://vitro.mannlib.cornell.edu/a/graph/wcmcPublications> \n" +
 			 "WHERE { \n" +
+			 "GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPublications> {\n" +
 			 "<" + newUri.trim() + "> ?p ?o . \n" +
-			 "}";
+			 "}}";
 		
 		logger.info(sparqlQuery);
 		
 		
-		SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcPublications");
+		SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 		ResultSet rs;
 		
 		try {
-		rs = vivoJena.executeSelectQuery(sparqlQuery);
+		rs = vivoJena.executeSelectQuery(sparqlQuery, true);
 		int count = Integer.parseInt(rs.nextSolution().get("count").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
 		if(count == 0) 
 		inVivo = false;
@@ -725,7 +933,7 @@ public class DeleteProfile {
 		} catch(IOException e) {
 		logger.error("Error connecting to Jena Database" , e);
 		}
-		this.jcf.returnConnectionToPool(vivoJena, "wcmcPublications");
+		this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 		
 		return inVivo;
 	}
@@ -754,15 +962,15 @@ public class DeleteProfile {
 	 */
 	private void addAuthorAsExternalEntity(String cwid, List<PublicationBean> publications) {
 		int firstCount = 0;
-		int randomNumber = 0;
+		String randomNumber;
 		int inferenceCount = 0;
 		
 		SDBJenaConnect vivoJena = null;
 		//Check for person in VIVO
-		StringBuilder sbs = new StringBuilder();
+		/*StringBuilder sbs = new StringBuilder();
 		sbs.append("SELECT ?vcard ?arg ?person \n");
-		sbs.append("from <http://vitro.mannlib.cornell.edu/a/graph/wcmcPublications> \n");
 		sbs.append("WHERE {\n");
+		sbs.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPublications> {\n");
 		sbs.append("?vcard <http://www.w3.org/2006/vcard/ns#givenName> \"" + this.givenName + "\" . \n");
 		if(!this.middleName.equals(" "))
 			sbs.append("OPTIONAL { ?vcard <http://vivoweb.org/ontology/core#middleName> \"" + this.middleName.trim() + "\" .} \n");
@@ -770,12 +978,12 @@ public class DeleteProfile {
 		sbs.append("?arg <http://www.w3.org/2006/vcard/ns#hasName> ?vcard . \n");
 		sbs.append("?person <http://purl.obolibrary.org/obo/ARG_2000028> ?arg . \n");
 		sbs.append("FILTER(REGEX(STR(?person),\"" + this.vivoNamespace + "person\",\"i\")) \n");
-		sbs.append("}");
-		vivoJena = this.jcf.getConnectionfromPool("wcmcPublications");
+		sbs.append("}}");
+		vivoJena = this.jcf.getConnectionfromPool("dataSet");
 		
 		ResultSet rs;
 		try {
-			rs = vivoJena.executeSelectQuery(sbs.toString());
+			rs = vivoJena.executeSelectQuery(sbs.toString(), true);
 			if(rs.hasNext()) { 
 				while(rs.hasNext())
 				{
@@ -794,12 +1002,16 @@ public class DeleteProfile {
 				logger.info("IOException" , e);
 			}
 		
-		this.jcf.returnConnectionToPool(vivoJena, "wcmcPublications");
+		this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 		
 		//If the person does not have a record in VIVO
 		if(randomNumber == 0) {
 			randomNumber = getAuthorshipPk(cwid);
-		}
+		}*/
+
+		randomNumber = getExternalPersonIdentifier(this.givenName, this.familyName);		 
+
+
 
 		Iterator<PublicationBean> i = publications.iterator();
 		logger.info("Check for Additional WCMC Authored pubs.");
@@ -812,93 +1024,88 @@ public class DeleteProfile {
 					firstCount = firstCount + 1;
 				}*/
 				StringBuilder sb = new StringBuilder();
-				sb.append("PREFIX vivo: <http://vivoweb.org/ontology/core#> \n"); 
+				sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n"); 
 				sb.append("PREFIX obo: <http://purl.obolibrary.org/obo/> \n");
 				sb.append("PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n");
 				sb.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n"); 
 				sb.append("PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n");
 				sb.append("WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPublications> \n"); 
 				sb.append("DELETE { \n");
-				sb.append("<" + pub.getAuthorshipUrl().trim() + "> vivo:relates ?person . \n");
-				sb.append("?person vivo:relatedBy <" + pub.getAuthorshipUrl().trim() + "> . \n");
+				sb.append("<" + pub.getAuthorshipUrl().trim() + "> core:relates ?person . \n");
+				sb.append("?person core:relatedBy <" + pub.getAuthorshipUrl().trim() + "> . \n");
 				sb.append("} \n");
 				sb.append("INSERT { \n");
-				sb.append( "<" + this.vivoNamespace + "person" + randomNumber +"> rdf:type <http://xmlns.com/foaf/0.1/Agent> . \n");
-				sb.append("<" + this.vivoNamespace + "person" + randomNumber +"> rdf:type wcmc:ExternalEntity . \n");
-				sb.append("<" + this.vivoNamespace + "person" + randomNumber +"> rdf:type <http://purl.obolibrary.org/obo/BFO_0000001> . \n");
-				sb.append("<" + this.vivoNamespace + "person" + randomNumber +"> rdf:type <http://purl.obolibrary.org/obo/BFO_0000002> . \n");
-				sb.append("<" + this.vivoNamespace + "person" + randomNumber +"> rdf:type <http://purl.obolibrary.org/obo/BFO_0000004> . \n");
-				sb.append("<" + this.vivoNamespace + "person" + randomNumber +"> rdf:type <http://xmlns.com/foaf/0.1/Person> . \n");
-				sb.append("<" + this.vivoNamespace + "person" + randomNumber +"> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
-				sb.append("<" + this.vivoNamespace + "person" + randomNumber +"> <http://purl.obolibrary.org/obo/ARG_2000028> <" + this.vivoNamespace + "arg2000028-" + randomNumber + "> . \n");
-				sb.append("<" + this.vivoNamespace + "person" + randomNumber +"> vivo:relatedBy <" + pub.getAuthorshipUrl().trim() + "> . \n");
-				sb.append("<" + this.vivoNamespace + "person" + randomNumber +"> <http://www.w3.org/2000/01/rdf-schema#label> \"" + this.familyName + this.middleName + this.givenName + "\" . \n");
-				sb.append("<" + this.vivoNamespace + "arg2000028-" + randomNumber + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> obo:BFO_0000002 . \n");
-				sb.append("<" + this.vivoNamespace + "arg2000028-" + randomNumber + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> obo:BFO_0000031 . \n");
-				sb.append("<" + this.vivoNamespace + "arg2000028-" + randomNumber + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> obo:BFO_0000001 . \n");
-				sb.append("<" + this.vivoNamespace + "arg2000028-" + randomNumber + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> obo:ARG_2000379 . \n");
-				sb.append("<" + this.vivoNamespace + "arg2000028-" + randomNumber + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Kind> . \n");
-				sb.append("<" + this.vivoNamespace + "arg2000028-" + randomNumber + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> obo:IAO_0000030 . \n");
-				sb.append("<" + this.vivoNamespace + "arg2000028-" + randomNumber + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Thing> . \n");
-				sb.append("<" + this.vivoNamespace + "arg2000028-" + randomNumber + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Individual> . \n");
-				sb.append("<" + this.vivoNamespace + "arg2000028-" + randomNumber + "> vitro:mostSpecificType <http://www.w3.org/2006/vcard/ns#Individual> . \n");
-				sb.append("<" + this.vivoNamespace + "arg2000028-" + randomNumber + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Individual> . \n");
-				sb.append("<" + this.vivoNamespace + "arg2000028-" + randomNumber + "> <http://purl.obolibrary.org/obo/ARG_2000029> <" + pub.getAuthorshipUrl().trim() + "> . \n");
-				sb.append("<" + this.vivoNamespace + "arg2000028-" + randomNumber + "> <http://www.w3.org/2006/vcard/ns#hasName> <" + this.vivoNamespace + "hasName-person" + randomNumber +"> . \n");
-				sb.append("<" + this.vivoNamespace + "arg2000028-" + randomNumber + "> <http://www.w3.org/2006/vcard/ns#hasTitle> <" + this.vivoNamespace + "hasTitle-person" + randomNumber +"> . \n");
-				sb.append("<" + this.vivoNamespace + "hasName-person" + randomNumber + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Name> . \n");
-				sb.append("<" + this.vivoNamespace + "hasName-person" + randomNumber + "> <http://www.w3.org/2006/vcard/ns#givenName> \"" + this.givenName + "\" . \n");
-				if(!this.middleName.equals(" "))
-					sb.append("<" + this.vivoNamespace + "hasName-person" + randomNumber + "> <http://vivoweb.org/ontology/core#middleName> \"" + this.middleName.trim() + "\" . \n");
-				sb.append("<" + this.vivoNamespace + "hasName-person" + randomNumber + "> <http://www.w3.org/2006/vcard/ns#familyName> \"" + this.familyName + "\" . \n");
-				sb.append("<" + this.vivoNamespace + "hasTitle-person" + randomNumber + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Title> . \n");
-				sb.append("<" + this.vivoNamespace + "hasTitle-person" + randomNumber + "> <http://www.w3.org/2006/vcard/ns#title> \"External Author\" . \n");
-				sb.append("<" + pub.getAuthorshipUrl().trim() + "> <http://vivoweb.org/ontology/core#relates> <" + this.vivoNamespace + "person" + randomNumber +"> .\n");
-				sb.append("<" + pub.getAuthorshipUrl().trim() + "> <http://vivoweb.org/ontology/core#relates> <" + this.vivoNamespace + "arg2000028-" + randomNumber +"> .\n");
-				sb.append("<" + this.vivoNamespace + "arg2000028-" + randomNumber + "> vivo:relatedBy <" + pub.getAuthorshipUrl().trim() + "> . \n");
+				sb.append("<" + pub.getAuthorshipUrl().trim() + "> core:relates <" + JenaConnectionFactory.nameSpace + "person" + randomNumber +"> .\n");
+				sb.append("<" + JenaConnectionFactory.nameSpace + "person" + randomNumber +"> rdf:type <http://purl.obolibrary.org/obo/BFO_0000001> . \n");
+				sb.append("<" + JenaConnectionFactory.nameSpace + "person" + randomNumber +"> rdf:type <http://purl.obolibrary.org/obo/BFO_0000002> . \n");
+				sb.append("<" + JenaConnectionFactory.nameSpace + "person" + randomNumber +"> rdf:type <http://purl.obolibrary.org/obo/IAO_0000030> . \n");
+				sb.append("<" + JenaConnectionFactory.nameSpace + "person" + randomNumber +"> rdf:type <http://purl.obolibrary.org/obo/BFO_0000031> . \n");
+				sb.append("<" + JenaConnectionFactory.nameSpace + "person" + randomNumber +"> rdf:type <http://purl.obolibrary.org/obo/ARG_2000379> . \n");
+				sb.append("<" + JenaConnectionFactory.nameSpace + "person" + randomNumber +"> rdf:type <http://www.w3.org/2006/vcard/ns#Kind> . \n");
+				sb.append("<" + JenaConnectionFactory.nameSpace + "person" + randomNumber +"> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+				sb.append("<" + JenaConnectionFactory.nameSpace + "person" + randomNumber +"> rdf:type <http://www.w3.org/2006/vcard/ns#Individual> . \n");
+				sb.append("<" + JenaConnectionFactory.nameSpace + "person" + randomNumber +"> vitro:mostSpecificType <http://www.w3.org/2006/vcard/ns#Individual> . \n");
+				sb.append("<" + JenaConnectionFactory.nameSpace + "person" + randomNumber +"> core:relatedBy <" + pub.getAuthorshipUrl().trim() + "> . \n");
+				sb.append("<" + JenaConnectionFactory.nameSpace + "person" + randomNumber +"> <http://www.w3.org/2006/vcard/ns#hasName> <" + JenaConnectionFactory.nameSpace + "hasName-person" + randomNumber + "> . \n");
+				sb.append("<" + JenaConnectionFactory.nameSpace + "hasName-person" + randomNumber + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Explanatory> . \n");
+				sb.append("<" + JenaConnectionFactory.nameSpace + "hasName-person" + randomNumber + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Addressing> . \n");
+				sb.append("<" + JenaConnectionFactory.nameSpace + "hasName-person" + randomNumber + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Thing> . \n");
+				sb.append("<" + JenaConnectionFactory.nameSpace + "hasName-person" + randomNumber + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Communication> . \n");
+				sb.append("<" + JenaConnectionFactory.nameSpace + "hasName-person" + randomNumber + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Identification> . \n");
+				sb.append("<" + JenaConnectionFactory.nameSpace + "hasName-person" + randomNumber + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/vcard/ns#Name> . \n");
+				sb.append("<" + JenaConnectionFactory.nameSpace + "hasName-person" + randomNumber + "> vitro:mostSpecificType <http://www.w3.org/2006/vcard/ns#Name> . \n");
+				if(this.givenName != null)
+					sb.append("<" + JenaConnectionFactory.nameSpace + "hasName-person" + randomNumber + "> <http://www.w3.org/2006/vcard/ns#givenName> \"" + this.givenName.replaceAll("'", "\'") + "\" . \n");
+				if(this.familyName != null)
+					sb.append("<" + JenaConnectionFactory.nameSpace + "hasName-person" + randomNumber + "> <http://www.w3.org/2006/vcard/ns#familyName> \"" + this.familyName.replaceAll("'", "\'") + "\" . \n");
 				sb.append("}\n");
 				sb.append("WHERE { \n");
-				sb.append("OPTIONAL { <" + pub.getAuthorshipUrl().trim() + "> vivo:relates ?person .\n");
-				sb.append("?person vivo:relatedBy <" + pub.getAuthorshipUrl().trim() + "> .\n");
+				sb.append("OPTIONAL { <" + pub.getAuthorshipUrl().trim() + "> core:relates ?person .\n");
+				sb.append("?person core:relatedBy <" + pub.getAuthorshipUrl().trim() + "> .\n");
 				sb.append("FILTER(REGEX(STR(?person),\"cwid\",\"i\") || REGEX(STR(?person),\"person\",\"i\")) }\n");
 				sb.append("}");
 				
 				logger.info(sb.toString());
 				
 				
-				
-				vivoJena = this.jcf.getConnectionfromPool("wcmcPublications");
-				
-				try {
-					vivoJena.executeUpdateQuery(sb.toString(), true);
-	
-				} catch(IOException e) {
-					// TODO Auto-generated catch block
-					logger.error("IOException" , e);
-				}
-				this.jcf.returnConnectionToPool(vivoJena, "wcmcPublications");
-				//Insert into inference graph
-				
-				if(inferenceCount == 0) {
-					logger.info("Insert into inference graph");
-					String sparqlQuery = "PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n" +
-						  "INSERT DATA { GRAPH <http://vitro.mannlib.cornell.edu/default/vitro-kb-inf> { \n" +
-						  "<" + this.vivoNamespace + "person" + randomNumber +"> <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#mostSpecificType> wcmc:ExternalEntity . \n" +
-						  "<" + pub.getAuthorshipUrl().trim() + "> <http://purl.obolibrary.org/obo/ARG_2000028> <" + this.vivoNamespace + "arg2000028-" + randomNumber +"> .\n" +
-						  "}}";
-					vivoJena = this.jcf.getConnectionfromPool("vitro-kb-inf");
+				if(ingestType.equals(IngestType.VIVO_API.toString())) {
+					logger.info(this.vivoClient.vivoUpdateApi(sb.toString()));
+				} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+					vivoJena = this.jcf.getConnectionfromPool("dataSet");
+					
 					try {
-						vivoJena.executeUpdateQuery(sparqlQuery, true);
+						vivoJena.executeUpdateQuery(sb.toString(), true);
+		
 					} catch(IOException e) {
 						// TODO Auto-generated catch block
 						logger.error("IOException" , e);
 					}
-					this.jcf.returnConnectionToPool(vivoJena, "vitro-kb-inf");
+					this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+					//Insert into inference graph
+					
+					if(inferenceCount == 0) {
+						logger.info("Insert into inference graph");
+						String sparqlQuery = "PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n" +
+							"INSERT DATA { GRAPH <http://vitro.mannlib.cornell.edu/default/vitro-kb-inf> { \n" +
+							"<" + this.vivoNamespace + "person" + randomNumber +"> <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#mostSpecificType> wcmc:ExternalEntity . \n" +
+							"<" + pub.getAuthorshipUrl().trim() + "> <http://purl.obolibrary.org/obo/ARG_2000028> <" + this.vivoNamespace + "arg2000028-" + randomNumber +"> .\n" +
+							"}}";
+						if(ingestType.equals(IngestType.VIVO_API.toString())) {
+							logger.info(this.vivoClient.vivoUpdateApi(sparqlQuery));
+						} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+							vivoJena = this.jcf.getConnectionfromPool("dataSet");
+							try {
+								vivoJena.executeUpdateQuery(sparqlQuery, true);
+							} catch(IOException e) {
+								// TODO Auto-generated catch block
+								logger.error("IOException" , e);
+							}
+							this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+						}
+					}
 				}
 				inferenceCount = inferenceCount + 1;
-			}
-			
-			
+			}	
 		}
 	}
 	
@@ -970,28 +1177,47 @@ public class DeleteProfile {
 		
 		//logger.info(sb.toString());
 		logger.info("Fetching all the remaining triples from different graphs for cleanup for " + cwid);
-		SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
-		ResultSet rs;
-		try {
-			rs = vivoJena.executeSelectQuery(sb.toString(), true);
-			while(rs.hasNext())
-			{
-				QuerySolution qs =rs.nextSolution();
-				
-				
-				if(qs.get("g")!=null && qs.get("p") !=null && qs.get("o") != null) {
-					
-					triples.add(new Triples(qs.get("g").toString(), this.vivoNamespace + "cwid-" + cwid.trim() , qs.get("p").toString(), qs.get("o").toString()));
-				
-					logger.info("Graph - " + qs.get("g").toString() + " - Triple : " + this.vivoNamespace + "cwid-" + cwid.trim() + " " + qs.get("p").toString() + " " + qs.get("o").toString());
+		if(ingestType.equals(IngestType.VIVO_API.toString())) {
+			String response = vivoClient.vivoQueryApi(sb.toString());
+			logger.info(response);
+			JSONObject obj = new JSONObject(response);
+			JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+			if(bindings != null && !bindings.isEmpty()) {
+				for (int i = 0; i < bindings.length(); ++i) {
+					if(bindings.getJSONObject(i).optJSONObject("g") != null && bindings.getJSONObject(i).optJSONObject("g").has("value")
+					&&
+					bindings.getJSONObject(i).optJSONObject("p") != null && bindings.getJSONObject(i).optJSONObject("p").has("value")
+					&&
+					bindings.getJSONObject(i).optJSONObject("o") != null && bindings.getJSONObject(i).optJSONObject("o").has("value")) {
+						triples.add(new Triples(bindings.getJSONObject(i).getJSONObject("g").getString("value"), this.vivoNamespace + "cwid-" + cwid.trim(), bindings.getJSONObject(i).getJSONObject("p").getString("value"), bindings.getJSONObject(i).getJSONObject("o").getString("value")));
+						logger.info("Graph - " + bindings.getJSONObject(i).getJSONObject("g").getString("value") + " - Triple: " + this.vivoNamespace + "cwid-" + cwid.trim()+ " " + bindings.getJSONObject(i).getJSONObject("p").getString("value") + " " + bindings.getJSONObject(i).getJSONObject("o").getString("value"));
+					}
 				}
 			}
-			} catch(IOException e) {
-				// TODO Auto-generated catch block
-				logger.info("IOException" , e);
-			}
-			
-		this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+		} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+			ResultSet rs;
+			try {
+				rs = vivoJena.executeSelectQuery(sb.toString(), true);
+				while(rs.hasNext())
+				{
+					QuerySolution qs =rs.nextSolution();
+					
+					
+					if(qs.get("g")!=null && qs.get("p") !=null && qs.get("o") != null) {
+						
+						triples.add(new Triples(qs.get("g").toString(), this.vivoNamespace + "cwid-" + cwid.trim() , qs.get("p").toString(), qs.get("o").toString()));
+					
+						logger.info("Graph - " + qs.get("g").toString() + " - Triple : " + this.vivoNamespace + "cwid-" + cwid.trim() + " " + qs.get("p").toString() + " " + qs.get("o").toString());
+					}
+				}
+				} catch(IOException e) {
+					// TODO Auto-generated catch block
+					logger.info("IOException" , e);
+				}
+				
+			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
+		}
 		
 		sb.setLength(0);
 		
@@ -1022,17 +1248,20 @@ public class DeleteProfile {
 			sb.append("}");*/
 			
 			logger.info(sb.toString());
-			
-			vivoJena = this.jcf.getConnectionfromPool("dataSet");
-			
-			logger.info("Deleting all the remaining triples for cwid - " + cwid );
-			try {
-				vivoJena.executeUpdateQuery(sb.toString(), true);
-			} catch(IOException e) {
-				logger.error("Error connecting to SDBJena");
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				logger.info(this.vivoClient.vivoUpdateApi(sb.toString()));
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+				
+				logger.info("Deleting all the remaining triples for cwid - " + cwid );
+				try {
+					vivoJena.executeUpdateQuery(sb.toString(), true);
+				} catch(IOException e) {
+					logger.error("Error connecting to SDBJena");
+				}
+				
+				this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			}
-			
-			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			
 			
 		}
@@ -1051,8 +1280,7 @@ public class DeleteProfile {
 		
 		int inActiveCount = 0;
 		int activeCount = 0;
-		this.con = this.mcf.getConnectionfromPool();
-		List<String> people = edi.getPeopleInVivo(this.jcf);
+		List<String> people = edi.getPeopleInVivo();
 		if(people.isEmpty())
 			logger.info("No People needs to be deleted");
 		
@@ -1071,28 +1299,46 @@ public class DeleteProfile {
 			 "}}";
 		
 		//logger.info(sparqlQuery);
-		
-		
-		SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
-		ResultSet rs;
-		try {
-			rs = vivoJena.executeSelectQuery(sparqlQuery,true);
-		
-		
-		while(rs.hasNext())
-		{
-			QuerySolution qs =rs.nextSolution();
-
-			if(qs.get("people") != null && !people.contains(qs.get("people").toString().replace(this.vivoNamespace + "cwid-", "").trim())) {
-				people.add(qs.get("people").toString().replace(this.vivoNamespace + "cwid-", "").trim());
+		if(ingestType.equals(IngestType.VIVO_API.toString())) {
+			try {
+				String response = this.vivoClient.vivoQueryApi(sparqlQuery);
+				logger.info(response);
+				JSONObject obj = new JSONObject(response);
+				JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+				if(bindings != null && !bindings.isEmpty()) {
+					for (int i = 0; i < bindings.length(); ++i) {
+						if(bindings.getJSONObject(i).optJSONObject("people") != null && bindings.getJSONObject(i).optJSONObject("people").has("value")) {
+							people.add(bindings.getJSONObject(i).getJSONObject("people").getString("value").replace(this.vivoNamespace + "cwid-", "").trim());
+						}
+					}
+				}
+				
+			} catch(Exception e) {
+				logger.error("Api Exception", e);
 			}
+		} else {
+		
+			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
+			ResultSet rs;
+			try {
+				rs = vivoJena.executeSelectQuery(sparqlQuery,true);
 			
+			
+			while(rs.hasNext())
+			{
+				QuerySolution qs =rs.nextSolution();
+
+				if(qs.get("people") != null && !people.contains(qs.get("people").toString().replace(this.vivoNamespace + "cwid-", "").trim())) {
+					people.add(qs.get("people").toString().replace(this.vivoNamespace + "cwid-", "").trim());
+				}
+				
+			}
+			} catch(IOException e) {
+				// TODO Auto-generated catch block
+				logger.info("IOException" , e);
+			}
+			this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 		}
-		} catch(IOException e) {
-			// TODO Auto-generated catch block
-			logger.info("IOException" , e);
-		}
-		this.jcf.returnConnectionToPool(vivoJena, "dataSet");
 			
 		
 			
@@ -1143,19 +1389,12 @@ public class DeleteProfile {
 		logger.info("Total inactive profile deleted: " + inActiveCount);
 		logger.info("Total active profiles in VIVO: " + activeCount);
 		
-		//Destroy LDAP Connection Pool
-		if(this.lcf !=null)
-			this.lcf.destroyConnectionPool();
-		//Destroy Jena Connection Pool
-		if(this.jcf != null)
-			this.jcf.destroyConnectionPool();
-		//Destory Mysql connection pool
-		if(this.con!=null) {
-			this.mcf.returnConnectionToPool(this.con);
-			this.mcf.destroyConnectionPool();
-		}
-		
 	}
+
+	private String getExternalPersonIdentifier(String firstname, String lastname) {
+        return DigestUtils.md5Hex(firstname + lastname).toLowerCase();
+
+    }
 	
 	/**
 	 * @param args

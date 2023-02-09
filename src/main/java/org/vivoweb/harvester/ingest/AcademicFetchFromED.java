@@ -1,28 +1,52 @@
 package org.vivoweb.harvester.ingest;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Iterator;
-
 import java.util.List;
-import org.apache.commons.lang.StringEscapeUtils;
-import org.apache.jena.query.QuerySolution;
-import org.apache.jena.query.ResultSet;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-import org.vivoweb.harvester.util.repo.SDBJenaConnect;
-
-import lombok.extern.slf4j.Slf4j;
+import java.util.Map;
+import java.util.concurrent.Callable;
 
 import com.unboundid.ldap.sdk.SearchResultEntry;
 
+import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.jena.query.Dataset;
+import org.apache.jena.query.QueryExecution;
+import org.apache.jena.query.QueryExecutionFactory;
+import org.apache.jena.query.QuerySolution;
+import org.apache.jena.query.ReadWrite;
+import org.apache.jena.query.ResultSet;
+import org.apache.jena.sparql.JenaTransactionException;
+import org.apache.jena.update.GraphStore;
+import org.apache.jena.update.GraphStoreFactory;
+import org.apache.jena.update.UpdateExecutionFactory;
+import org.apache.jena.update.UpdateFactory;
+import org.apache.jena.update.UpdateProcessor;
+import org.apache.jena.update.UpdateRequest;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+import org.springframework.util.StopWatch;
+import org.vivoweb.harvester.util.repo.SDBJenaConnect;
+import org.vivoweb.harvester.util.repo.TDBJenaConnect;
+
+import lombok.extern.slf4j.Slf4j;
 import reciter.connect.beans.vivo.PeopleBean;
 import reciter.connect.database.ldap.LDAPConnectionFactory;
+import reciter.connect.database.mysql.MysqlConnectionFactory;
 import reciter.connect.database.mysql.jena.JenaConnectionFactory;
-import reciter.connect.vivo.sdb.VivoGraphs;
+import reciter.connect.database.tdb.TDBConnectionFactory;
+import reciter.connect.vivo.IngestType;
+import reciter.connect.vivo.api.client.VivoClient;
 
 /**
  * @author szd2013
@@ -34,23 +58,28 @@ import reciter.connect.vivo.sdb.VivoGraphs;
 @Component
 public class AcademicFetchFromED {
 	
-	/**
-	 * List of people in VIVO
-	 */
-	private ArrayList<PeopleBean> people = new ArrayList<PeopleBean>();
-	
 	private int updateCount = 0;
 	
 	public static String propertyFilePath;
-	
-	/**
-	 * Jena connection factory object for all the apache jena sdb related connections
-	 */
+
 	@Autowired
-	private JenaConnectionFactory jcf;
+	private VivoClient vivoClient;
 	
 	@Autowired
 	private LDAPConnectionFactory lcf;
+
+	@Autowired
+	private JenaConnectionFactory jcf;
+
+	@Autowired
+	private TDBConnectionFactory tcf;
+
+	@Autowired
+	private MysqlConnectionFactory mycf;
+
+	private Map<String, String> vivoCoiMap = new HashMap<>();
+	
+	private String ingestType = System.getenv("INGEST_TYPE");
 	
 	/**
 	 * The default namespace for VIVO
@@ -65,19 +94,23 @@ public class AcademicFetchFromED {
 	 * @throws IOException
 	 * @throws FileNotFoundException
 	 */
-		
+	
+	public Callable<String> getCallable(List<PeopleBean> people) {
+        return new Callable<String>() {
+            public String call() throws Exception {
+                return execute(people);
+            }
+        };
+    }
 		
 		/**
 		 * This is the main execution method of the class
 		 */
-	public void execute() throws IOException {
-
-		getActivePeopleFromED();
-		
+	public String execute(List<PeopleBean> people) throws IOException {
+		StopWatch stopWatch = new StopWatch("People fetch performance");
+		stopWatch.start("Person updates");
 		int count = 0;
-		
-		
-		Iterator<PeopleBean>  it = this.people.iterator();
+		Iterator<PeopleBean>  it = people.iterator();
 		while(it.hasNext()) {
 			PeopleBean pb = it.next();
 			log.info("################################ " + pb.getCwid() + " - " + pb.getDisplayName() + " - Insert/Update Operation #####################");
@@ -89,7 +122,8 @@ public class AcademicFetchFromED {
 			else {
 				log.info("Person: "+pb.getCwid() + " already exist in VIVO");
 				checkForUpdates(pb);
-				syncPersonTypes(pb);
+				syncCOIData(pb);
+				//syncPersonTypes(pb);
 			}
 			log.info("################################ End of " + pb.getCwid() + " - " + pb.getDisplayName() + " -  Insert/Update Operation ###################");
 		}
@@ -97,19 +131,20 @@ public class AcademicFetchFromED {
 		log.info("Number of new people inserted in VIVO: " + count);
 		
 		log.info("Number of people updated in VIVO: " + this.updateCount);
-		
-		
-		log.info("People fetch completed successfully...");
+		stopWatch.stop();
+		log.info("People fetch Time taken: " + stopWatch.getTotalTimeSeconds() + "s");
+		return "People fetch completed successfully for cwids: " + people.toString();
 	}
 		
 		
 		/**
 		 * This function gets active people from Enterprise Directory having personTypeCode as academic
 		 */
-		private void getActivePeopleFromED() {
+		public List<PeopleBean> getActivePeopleFromED() {
 
+			List<PeopleBean> people = new ArrayList<>();
 			int noCwidCount = 0;
-			String filter = "(&(objectClass=eduPerson)(weillCornellEduCWID=rak2007)(weillCornellEduPersonTypeCode=academic))";
+			String filter = "(&(objectClass=eduPerson)(weillCornellEduPersonTypeCode=academic))";
 			
 			List<SearchResultEntry> results = lcf.searchWithBaseDN(filter,"ou=people,dc=weill,dc=cornell,dc=edu");
 			
@@ -179,15 +214,16 @@ public class AcademicFetchFromED {
 							log.info(s);
 						}
 						log.info("------------------------------------------------------------------------------------------------------------");
-						this.people.add(pb);
+						people.add(pb);
 				}
 			}
-				log.info("Number of people found: " + this.people.size());
+				log.info("Number of people found: " + people.size());
 				log.info("No of Records with no CWID: " + noCwidCount);
 			}
 			else {
 				log.info("No results found");
-			}		
+			}
+			return people;	
 		}
 		
 		/**
@@ -243,6 +279,9 @@ public class AcademicFetchFromED {
 			for(String nsType: pb.getNsTypes()) {
 				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> rdf:type " + nsType + " . \n");
 			}
+			if(this.vivoCoiMap.containsKey(pb.getCwid())) {
+				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> \"" + this.vivoCoiMap.get(pb.getCwid()) + "\" . \n");
+			}
 			sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:personLabel \"" + pb.getDisplayName().trim() + "\" . \n");
 			sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:cwid \"" + pb.getCwid().trim() + "\" . \n");
 			sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> rdfs:label \"" + lastMiddleFirst + "\" . \n");
@@ -283,19 +322,34 @@ public class AcademicFetchFromED {
 				
 			}
 			sb.append("}}");
+			//log.info(sb.toString());
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				try{
+					String response = this.vivoClient.vivoUpdateApi(sb.toString());
+					log.info(response);
+				} catch(Exception  e) {
+					log.info("Api Exception", e);
+				}
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+				try {
+					TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
+					runSparqlUpdateTemplate(sb.toString(), vivoJena);
+					if(vivoJena != null)
+						this.tcf.returnConnectionToPool(vivoJena, "dataSet");
+				} catch(IOException e) {
+					log.error("Error connecting to Jena database", e);
+				}
 			
-			log.info(sb.toString());
-			
-			try {
-				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
-				runSparqlUpdateTemplate(sb.toString(), vivoJena);
-				
-				if(vivoJena!= null)
-					this.jcf.returnConnectionToPool(vivoJena, "wcmcPeople");
-			} catch(IOException e) {
-				log.error("Error connecting to Jena database", e);
+			} else {
+				try {
+					TDBJenaConnect vivoJena = this.tcf.createNewDataSetConnectionForPool();
+					runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
+					if(vivoJena != null)
+						vivoJena.getDataset().close();
+				} catch(IOException e) {
+					log.error("Error connecting to Jena database", e);
+				}
 			}
-			
 			insertInferenceTriples(pb);
 		}
 		
@@ -338,17 +392,37 @@ public class AcademicFetchFromED {
 			sb.append("<" + this.vivoNamespace + "arg2000028-"  + pb.getCwid().trim() + "> rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
 			sb.append("<" + this.vivoNamespace + "arg2000028-"  + pb.getCwid().trim() + "> vitro:mostSpecificType vcard:Individual . \n");
 			sb.append("}}");
-			
-			
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("vitro-kb-inf");
 
-			try{
-				vivoJena.executeUpdateQuery(sb.toString(),true);
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				try{
+					String response = this.vivoClient.vivoUpdateApi(sb.toString());
+					log.info(response);
+				} catch(Exception  e) {
+					log.info("Api Exception", e);
+				}
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
+
+				try{
+					vivoJena.executeUpdateQuery(sb.toString(),true);
+				}
+				catch(IOException e) {
+					log.error("Error connecting to Jena Database", e);
+				}
+				if(vivoJena != null)
+					this.tcf.returnConnectionToPool(vivoJena, "dataSet");
+			} else {
+				TDBJenaConnect vivoJena = this.tcf.createNewDataSetConnectionForPool();
+
+				try{
+					runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
+				}
+				catch(IOException e) {
+					log.error("Error connecting to Jena Database", e);
+				}
+				if(vivoJena != null)
+					vivoJena.getDataset().close();
 			}
-			catch(IOException e) {
-				log.error("Error connecting to Jena Database", e);
-			}
-			this.jcf.returnConnectionToPool(vivoJena, "vitro-kb-inf");
 		}
 		
 		/**
@@ -487,34 +561,50 @@ public class AcademicFetchFromED {
 			String sparqlQuery = "PREFIX rdf:      <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 									"PREFIX foaf:     <http://xmlns.com/foaf/0.1/> \n" +
 									"SELECT  (count(rdf:type) as ?c) \n" +
-									//"FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n" +
 									"WHERE {\n" +
-									"GRAPH <" + VivoGraphs.PEOPLE_GRAPH + "> {" +
+									"GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> {\n" +
 									"<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> rdf:type foaf:Person . \n" +
 									"}}";
 
-			log.debug(sparqlQuery);
-			
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
-			
-			//ResultSet rs = runSparqlTemplate(sparqlQuery, vivoJena);
-			ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery, true);
-			QuerySolution qs = rs.nextSolution();
-			log.info(qs.getLiteral("c").getInt() + "Count");
-			count = Integer.parseInt(qs.get("c").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
-			
-			//Close the connection
-			if(vivoJena!= null)
-				this.jcf.returnConnectionToPool(vivoJena, "wcmcPeople");
-			
+			log.info(sparqlQuery);
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				try {
+					String response = this.vivoClient.vivoQueryApi(sparqlQuery);
+					log.info(response);
+					JSONObject obj = new JSONObject(response);
+					JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+					count = bindings.getJSONObject(0).getJSONObject("c").getInt("value");
+				} catch(Exception e) {
+					log.error("Api Exception", e);
+				}
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+
+				TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
+				
+				ResultSet rs = runSparqlTemplate(sparqlQuery, vivoJena);
+				
+				QuerySolution qs = rs.nextSolution();
+				count = Integer.parseInt(qs.get("c").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
+				if(vivoJena != null)
+					this.tcf.returnConnectionToPool(vivoJena, "dataSet");
+			} else {
+				TDBJenaConnect vivoJena = this.tcf.createNewDataSetConnectionForPool();
+				try{
+				ResultSet rs = runTDBSparqlTemplate(sparqlQuery, vivoJena);
+				
+				QuerySolution qs = rs.nextSolution();
+				count = Integer.parseInt(qs.get("c").toString().replace("^^http://www.w3.org/2001/XMLSchema#integer", ""));
+				} catch(JenaTransactionException e) {
+					log.error("TDB Exception with uid: ", e);
+				}
+				if(vivoJena != null)
+					vivoJena.getDataset().close();
+			}
+
 			if(count > 0)
 				return true;
 			else
-				return false;
-			
-			
-			
-			
+				return false;			
 		}
 		
 		/**
@@ -522,10 +612,26 @@ public class AcademicFetchFromED {
 		 * This function check for updates from ED and then apply them in VIVO. For email , displayName, lastName, Phone numbers, Primary Title etc.
 		 */
 		private void checkForUpdates(PeopleBean pb) {
-			ArrayList<String> updateList = new ArrayList<String>();
-			ArrayList<String> insertList = new ArrayList<String>();
-			String phone = "";
-			String middleName = "";
+			List<String> updateList = new ArrayList<String>();
+			List<String> insertList = new ArrayList<String>();
+			String phone = null;
+			String middleName = null;
+			String label = null;
+			String type = null;
+			String title = null;
+			String email = null;
+			String firstName = null;
+			String lastName = null;
+			String popsUrl = null;
+			String sdbPhone = null;
+			String sdbMiddleName = null;
+			String sdbLabel = null;
+			String sdbType = null;
+			String sdbTitle = null;
+			String sdbEmail = null;
+			String sdbFirstName = null;
+			String sdbLastName = null;
+			String sdbPopsUrl = null;
 			String sparqlQuery = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 					"PREFIX foaf: <http://xmlns.com/foaf/0.1/> \n" +
 					"PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n" +
@@ -533,7 +639,6 @@ public class AcademicFetchFromED {
 					"PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n" +
 					"PREFIX vcard: <http://www.w3.org/2006/vcard/ns#> \n" +
 					"SELECT ?label ?type ?phone ?title ?email ?firstName ?lastName ?middleName ?popsUrl\n" +
-					//"FROM <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n" +
 					"WHERE \n" +
 					"{ \n" +
 					"GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> {\n" +
@@ -549,66 +654,182 @@ public class AcademicFetchFromED {
 					"}}";
 			
 			log.debug(sparqlQuery);
-			SDBJenaConnect vivoJena;
+			TDBJenaConnect vivoJena = null;
 			try {
-				vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
-				ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery, true);//runSparqlTemplate(sparqlQuery, vivoJena);
-				QuerySolution qs = null;
-					if(rs.hasNext()) {
-						qs = rs.nextSolution();
+				if(ingestType.equals(IngestType.VIVO_API.toString())) {
+					String response = this.vivoClient.vivoQueryApi(sparqlQuery);
+					log.info(response);
+					JSONObject obj = new JSONObject(response);
+					JSONArray bindings = obj.getJSONObject("results").getJSONArray("bindings");
+					if(bindings != null && !bindings.isEmpty()) {
+						if(bindings.getJSONObject(0).optJSONObject("label").has("value"))
+							label = bindings.getJSONObject(0).getJSONObject("label").getString("value");
 						
+						if(bindings.getJSONObject(0).optJSONObject("type").has("value"))
+							type = bindings.getJSONObject(0).getJSONObject("type").getString("value");
 						
-						if(!qs.get("label").toString().equals(pb.getDisplayName().trim())) {
+						if(bindings.getJSONObject(0).optJSONObject("phone") != null && bindings.getJSONObject(0).optJSONObject("phone").has("value"))
+							phone = bindings.getJSONObject(0).getJSONObject("phone").getString("value");
+						
+						if(bindings.getJSONObject(0).optJSONObject("title") != null && bindings.getJSONObject(0).optJSONObject("title").has("value"))
+							title = bindings.getJSONObject(0).getJSONObject("title").getString("value");
+						
+						if(bindings.getJSONObject(0).optJSONObject("email") !=  null && bindings.getJSONObject(0).optJSONObject("email").has("value"))
+							email = bindings.getJSONObject(0).getJSONObject("email").getString("value");
+						
+						if(bindings.getJSONObject(0).optJSONObject("firstName").has("value"))
+							firstName = bindings.getJSONObject(0).getJSONObject("firstName").getString("value");
+
+						if(bindings.getJSONObject(0).optJSONObject("lastName").has("value"))
+							lastName = bindings.getJSONObject(0).getJSONObject("lastName").getString("value");
+						
+						if(bindings.getJSONObject(0).optJSONObject("middleName") != null && bindings.getJSONObject(0).optJSONObject("middleName").has("value"))
+							middleName = bindings.getJSONObject(0).getJSONObject("middleName").getString("value");
+						
+						if(bindings.getJSONObject(0).optJSONObject("popsUrl") != null && bindings.getJSONObject(0).optJSONObject("popsUrl").has("value"))
+							popsUrl = bindings.getJSONObject(0).getJSONObject("popsUrl").getString("value");
+
+					
+						if(label != null && !label.equals(pb.getDisplayName().trim())) {
 							updateList.add("DisplayName");
 							log.info("Person Label was updated for cwid: " + pb.getCwid().trim());
 						}
-						if(!qs.get("type").toString().equals(pb.getPersonCode().trim())) {
+						if(type != null && !type.equals(pb.getPersonCode().trim())) {
 							updateList.add("MostSpecificType");
 							log.info("MostSpecificType was updated for cwid: " + pb.getCwid().trim());
 						}
-						if(qs.get("title") != null && !qs.get("title").toString().equals(pb.getPrimaryTitle().trim())) {
+						if(title != null && !title.equals(pb.getPrimaryTitle().trim())) {
 							updateList.add("PrimaryTitle");
 							log.info("Title was updated for cwid: " + pb.getCwid().trim());
 						}
-						if(qs.get("email") != null && !qs.get("email").toString().equals(pb.getMail().trim())) {
+						if(email != null && !email.equals(pb.getMail().trim())) {
 							updateList.add("Mail");
 							log.info("Email was updated for cwid: " + pb.getCwid().trim());
 						}
 						
-						if(qs.get("email") == null && pb.getMail() != null && !pb.getMail().equals("")) {
+						if(email == null && pb.getMail() != null && !pb.getMail().equals("")) {
 							insertList.add("Mail");
 							log.info("Email was inserted for cwid: " + pb.getCwid().trim());
 						}
 						
-						if(qs.get("phone") == null && pb.getTelephoneNumber() != null && !pb.getTelephoneNumber().equals("")) {
+						if(phone == null && pb.getTelephoneNumber() != null && !pb.getTelephoneNumber().equals("")) {
 							insertList.add("TelephoneNumber");
 							log.info("Phone was inserted for cwid: " + pb.getCwid().trim());
 						}
 						
-						if(qs.get("middleName") == null && pb.getMiddleName() != null && !pb.getMiddleName().equals("")) {
+						if(middleName == null && pb.getMiddleName() != null && !pb.getMiddleName().equals("")) {
 							insertList.add("MiddleName");
 							log.info("Middle Name was inserted for cwid: " + pb.getCwid().trim());
 						}
 						
-						if(qs.get("phone") != null && !qs.get("phone").toString().equals(pb.getTelephoneNumber().trim())) {
+						if(phone != null && !phone.equals(pb.getTelephoneNumber().trim())) {
 							updateList.add("TelephoneNumber");
 							log.info("Phone was updated for cwid: " + pb.getCwid().trim());
 						}
-						if(!qs.get("firstName").toString().equals(pb.getGivenName().trim())) {
+						if(firstName != null && !firstName.equals(pb.getGivenName().trim())) {
 							updateList.add("FirstName");
 							log.info("First was updated for cwid: " + pb.getCwid().trim());
 						}
-						if(!qs.get("lastName").toString().equals(pb.getSn().trim())) {
+						if(lastName != null && !lastName.equals(pb.getSn().trim())) {
 							updateList.add("LastName");
 							log.info("Last Name was updated for cwid: " + pb.getCwid().trim());
 						}
-						if(qs.get("middleName") != null && !qs.get("middleName").toString().equals(pb.getMiddleName().trim())) {
+						if(middleName!= null && !middleName.equals(pb.getMiddleName().trim())) {
 							updateList.add("MiddleName");
 							log.info("Middle Name was updated for cwid: " + pb.getCwid().trim());
 						}
-						if(qs.get("popsUrl") == null && pb.getPopsProfile() != null && !pb.getPopsProfile().equals("")) {
+						if(popsUrl == null && pb.getPopsProfile() != null && !pb.getPopsProfile().equals("")) {
 							insertList.add("PopsUrl");
 							log.info("Pops Url was inserted for cwid: " + pb.getCwid().trim());
+						}
+					}
+				} else {
+					vivoJena = this.tcf.createNewDataSetConnectionForPool();
+					ResultSet rs = runTDBSparqlTemplate(sparqlQuery, vivoJena);
+					QuerySolution qs = null;
+						if(rs.hasNext()) {
+							qs = rs.nextSolution();
+							
+							if(qs.get("label") != null)
+								sdbLabel = qs.get("label").toString();
+
+							if(qs.get("type") != null)
+								sdbType = qs.get("type").toString();
+							
+							if(qs.get("title") != null)
+								sdbTitle = qs.get("title").toString();
+							
+							if(qs.get("email") != null)
+								sdbEmail = qs.get("email").toString();
+
+							if(qs.get("phone") != null)
+								sdbPhone = qs.get("phone").toString();
+
+							if(qs.get("middleName") != null)
+								sdbMiddleName = qs.get("middleName").toString();
+
+							if(qs.get("firstName") != null)
+								sdbFirstName = qs.get("firstName").toString();
+							
+							if(qs.get("lastName") != null)
+								sdbLastName = qs.get("lastName").toString();
+
+							if(qs.get("popsUrl") != null)
+								sdbPopsUrl = qs.get("popsUrl").toString();
+							
+							
+							if(!qs.get("label").toString().equals(pb.getDisplayName().trim())) {
+								updateList.add("DisplayName");
+								log.info("Person Label was updated for cwid: " + pb.getCwid().trim());
+							}
+							if(!qs.get("type").toString().equals(pb.getPersonCode().trim())) {
+								updateList.add("MostSpecificType");
+								log.info("MostSpecificType was updated for cwid: " + pb.getCwid().trim());
+							}
+							if(qs.get("title") != null && !qs.get("title").toString().equals(pb.getPrimaryTitle().trim())) {
+								updateList.add("PrimaryTitle");
+								log.info("Title was updated for cwid: " + pb.getCwid().trim());
+							}
+							if(qs.get("email") != null && !qs.get("email").toString().equals(pb.getMail().trim())) {
+								updateList.add("Mail");
+								log.info("Email was updated for cwid: " + pb.getCwid().trim());
+							}
+							
+							if(qs.get("email") == null && pb.getMail() != null && !pb.getMail().equals("")) {
+								insertList.add("Mail");
+								log.info("Email was inserted for cwid: " + pb.getCwid().trim());
+							}
+							
+							if(qs.get("phone") == null && pb.getTelephoneNumber() != null && !pb.getTelephoneNumber().equals("")) {
+								insertList.add("TelephoneNumber");
+								log.info("Phone was inserted for cwid: " + pb.getCwid().trim());
+							}
+							
+							if(qs.get("middleName") == null && pb.getMiddleName() != null && !pb.getMiddleName().equals("")) {
+								insertList.add("MiddleName");
+								log.info("Middle Name was inserted for cwid: " + pb.getCwid().trim());
+							}
+							
+							if(qs.get("phone") != null && !qs.get("phone").toString().equals(pb.getTelephoneNumber().trim())) {
+								updateList.add("TelephoneNumber");
+								log.info("Phone was updated for cwid: " + pb.getCwid().trim());
+							}
+							if(!qs.get("firstName").toString().equals(pb.getGivenName().trim())) {
+								updateList.add("FirstName");
+								log.info("First was updated for cwid: " + pb.getCwid().trim());
+							}
+							if(!qs.get("lastName").toString().equals(pb.getSn().trim())) {
+								updateList.add("LastName");
+								log.info("Last Name was updated for cwid: " + pb.getCwid().trim());
+							}
+							if(qs.get("middleName") != null && !qs.get("middleName").toString().equals(pb.getMiddleName().trim())) {
+								updateList.add("MiddleName");
+								log.info("Middle Name was updated for cwid: " + pb.getCwid().trim());
+							}
+							if(qs.get("popsUrl") == null && pb.getPopsProfile() != null && !pb.getPopsProfile().equals("")) {
+								insertList.add("PopsUrl");
+								log.info("Pops Url was inserted for cwid: " + pb.getCwid().trim());
+							}
 						}
 					}
 					
@@ -617,107 +838,203 @@ public class AcademicFetchFromED {
 					}
 					else {
 						StringBuffer sb = new StringBuffer();
+						if(ingestType.equals(IngestType.VIVO_API.toString())) {
+							
 						
-						sb.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
-						sb.append("PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n");
-						sb.append("PREFIX foaf: <http://xmlns.com/foaf/0.1/> \n");
-		                sb.append("PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n");
-		                sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
-		                sb.append("PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n");
-		                sb.append("WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n");
-		                sb.append("DELETE { \n");
-		                if(updateList.contains("DisplayName")) {
-		                    sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:personLabel \"" + qs.get("label").toString() + "\" .\n");
-		                }
-		                if(updateList.contains("PrimaryTitle")) {
-		                	sb.append("<" + this.vivoNamespace + "hasTitle-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#title> \"" + qs.get("title").toString() + "\" .\n");
-		                }
-		                if(updateList.contains("Mail")) {
-		                	sb.append("<" + this.vivoNamespace + "hasEmail-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#email> \"" + qs.get("email").toString() + "\" .\n");
-		                }
-		                if(updateList.contains("TelephoneNumber")) {
-		                	sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:officePhone \"" + qs.get("phone").toString() + "\" .\n");
-		                }
-		                if(updateList.contains("FirstName")) {
-		                	sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#givenName> \"" + qs.get("firstName").toString() + "\" .\n");
-		                }
-		                if(updateList.contains("LastName")) {
-		                	sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#familyName> \"" + qs.get("lastName").toString() + "\" .\n");
-		                }
-		                if(updateList.contains("MiddleName")) {
-		                	sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> core:middleName \"" + qs.get("middleName").toString() + "\" .\n");
-		                }
-		                if(updateList.contains("MostSpecificType")) {
-		                	sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> vitro:mostSpecificType <" + qs.get("type").toString() + "> .\n");
-		                }
-		                sb.append("} \n");
-		                sb.append("INSERT { \n");
-		                if(updateList.contains("DisplayName")) {
-		                	sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:personLabel \"" + pb.getDisplayName().trim() + "\" .\n");
-		                }
-		                if(updateList.contains("PrimaryTitle")) {
-		                	sb.append("<" + this.vivoNamespace + "hasTitle-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#title> \"" + pb.getPrimaryTitle().trim() + "\" .\n");
-		                }
-		                if(updateList.contains("Mail")) {
-		                	sb.append("<" + this.vivoNamespace + "hasEmail-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#email> \"" + pb.getMail().trim() + "\" .\n");
-		                }
-		                if(updateList.contains("TelephoneNumber")) {
-		                	sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:officePhone \"" + pb.getTelephoneNumber().trim() + "\" .\n");
-		                }
-		                if(updateList.contains("FirstName")) {
-		                	sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#givenName> \"" + pb.getGivenName().trim() + "\" .\n");
-		                }
-		                if(updateList.contains("LastName")) {
-		                	sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#familyName> \"" + pb.getSn().trim() + "\" .\n");
-		                }
-		                if(updateList.contains("MiddleName")) {
-		                	sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> core:middleName \"" + pb.getMiddleName().trim() + "\" .\n");
-		                }
-		                
-		                if(updateList.contains("MostSpecificType")) {
-		                	sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> vitro:mostSpecificType <" + pb.getPersonCode().trim() + "> .\n");
-		                }
-		                
-		                sb.append("} \n");
-		                sb.append("WHERE { \n");
-		                if(updateList.contains("DisplayName")) {
-		                    sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:personLabel \"" + qs.get("label").toString() + "\" .\n");
-		                }
-		                if(updateList.contains("PrimaryTitle")) {
-		                	sb.append("<" + this.vivoNamespace + "hasTitle-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#title> \"" + qs.get("title").toString() + "\" .\n");
-		                }
-		                if(updateList.contains("Mail")) {
-		                	sb.append("<" + this.vivoNamespace + "hasEmail-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#email> \"" + qs.get("email").toString() + "\" .\n");
-		                }
-		                if(updateList.contains("TelephoneNumber")) {
-		                	sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:officePhone \"" + qs.get("phone").toString() + "\" .\n");
-		                }
-		                if(updateList.contains("FirstName")) {
-		                	sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#givenName> \"" + qs.get("firstName").toString() + "\" .\n");
-		                }
-		                if(updateList.contains("LastName")) {
-		                	sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#familyName> \"" + qs.get("lastName").toString() + "\" .\n");
-		                }
-		                if(updateList.contains("MiddleName")) {
-		                	sb.append("OPTIONAL { <" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> core:middleName \"" + qs.get("middleName").toString() + "\" . }\n");
-		                }
-		                if(updateList.contains("MostSpecificType")) {
-		                	sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> vitro:mostSpecificType <" + qs.get("type").toString() + "> .\n");
-		                }
-		                sb.append("} \n");
-		                
-		                log.info("Update Query: " + sb.toString());
-		                
-		                
-		                
-		                runSparqlUpdateTemplate(sb.toString(), vivoJena);
-		                
-		                this.updateCount = this.updateCount + 1;
+							sb.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
+							sb.append("PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n");
+							sb.append("PREFIX foaf: <http://xmlns.com/foaf/0.1/> \n");
+							sb.append("PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n");
+							sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
+							sb.append("PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n");
+							sb.append("WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n");
+							sb.append("DELETE { \n");
+							if(updateList.contains("DisplayName")) {
+								sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:personLabel \"" + label + "\" .\n");
+							}
+							if(updateList.contains("PrimaryTitle")) {
+								sb.append("<" + this.vivoNamespace + "hasTitle-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#title> \"" + title + "\" .\n");
+							}
+							if(updateList.contains("Mail")) {
+								sb.append("<" + this.vivoNamespace + "hasEmail-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#email> \"" + email + "\" .\n");
+							}
+							if(updateList.contains("TelephoneNumber")) {
+								sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:officePhone \"" + phone + "\" .\n");
+							}
+							if(updateList.contains("FirstName")) {
+								sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#givenName> \"" + firstName + "\" .\n");
+							}
+							if(updateList.contains("LastName")) {
+								sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#familyName> \"" + lastName + "\" .\n");
+							}
+							if(updateList.contains("MiddleName")) {
+								sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> core:middleName \"" + middleName + "\" .\n");
+							}
+							if(updateList.contains("MostSpecificType")) {
+								sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> vitro:mostSpecificType <" + type + "> .\n");
+							}
+							sb.append("} \n");
+							sb.append("INSERT { \n");
+							if(updateList.contains("DisplayName")) {
+								sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:personLabel \"" + pb.getDisplayName().trim() + "\" .\n");
+							}
+							if(updateList.contains("PrimaryTitle")) {
+								sb.append("<" + this.vivoNamespace + "hasTitle-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#title> \"" + pb.getPrimaryTitle().trim() + "\" .\n");
+							}
+							if(updateList.contains("Mail")) {
+								sb.append("<" + this.vivoNamespace + "hasEmail-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#email> \"" + pb.getMail().trim() + "\" .\n");
+							}
+							if(updateList.contains("TelephoneNumber")) {
+								sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:officePhone \"" + pb.getTelephoneNumber().trim() + "\" .\n");
+							}
+							if(updateList.contains("FirstName")) {
+								sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#givenName> \"" + pb.getGivenName().trim() + "\" .\n");
+							}
+							if(updateList.contains("LastName")) {
+								sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#familyName> \"" + pb.getSn().trim() + "\" .\n");
+							}
+							if(updateList.contains("MiddleName")) {
+								sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> core:middleName \"" + pb.getMiddleName().trim() + "\" .\n");
+							}
+							
+							if(updateList.contains("MostSpecificType")) {
+								sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> vitro:mostSpecificType <" + pb.getPersonCode().trim() + "> .\n");
+							}
+							
+							sb.append("} \n");
+							sb.append("WHERE { \n");
+							if(updateList.contains("DisplayName")) {
+								sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:personLabel \"" + label + "\" .\n");
+							}
+							if(updateList.contains("PrimaryTitle")) {
+								sb.append("<" + this.vivoNamespace + "hasTitle-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#title> \"" + title + "\" .\n");
+							}
+							if(updateList.contains("Mail")) {
+								sb.append("<" + this.vivoNamespace + "hasEmail-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#email> \"" + email + "\" .\n");
+							}
+							if(updateList.contains("TelephoneNumber")) {
+								sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:officePhone \"" + phone + "\" .\n");
+							}
+							if(updateList.contains("FirstName")) {
+								sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#givenName> \"" + firstName + "\" .\n");
+							}
+							if(updateList.contains("LastName")) {
+								sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#familyName> \"" + lastName + "\" .\n");
+							}
+							if(updateList.contains("MiddleName")) {
+								sb.append("OPTIONAL { <" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> core:middleName \"" + middleName + "\" . }\n");
+							}
+							if(updateList.contains("MostSpecificType")) {
+								sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> vitro:mostSpecificType <" + type + "> .\n");
+							}
+							sb.append("} \n");
+							
+							log.info("Update Query: " + sb.toString());
+							log.info(this.vivoClient.vivoUpdateApi(sb.toString()));
+							
+							this.updateCount = this.updateCount + 1;
+						} else {
+							
+							sb.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
+							sb.append("PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n");
+							sb.append("PREFIX foaf: <http://xmlns.com/foaf/0.1/> \n");
+							sb.append("PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n");
+							sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
+							sb.append("PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n");
+							sb.append("WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n");
+							sb.append("DELETE { \n");
+							if(updateList.contains("DisplayName")) {
+								sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:personLabel \"" + sdbLabel + "\" .\n");
+							}
+							if(updateList.contains("PrimaryTitle")) {
+								sb.append("<" + this.vivoNamespace + "hasTitle-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#title> \"" + sdbTitle + "\" .\n");
+							}
+							if(updateList.contains("Mail")) {
+								sb.append("<" + this.vivoNamespace + "hasEmail-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#email> \"" + sdbEmail + "\" .\n");
+							}
+							if(updateList.contains("TelephoneNumber")) {
+								sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:officePhone \"" + sdbPhone + "\" .\n");
+							}
+							if(updateList.contains("FirstName")) {
+								sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#givenName> \"" + sdbFirstName + "\" .\n");
+							}
+							if(updateList.contains("LastName")) {
+								sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#familyName> \"" + sdbLastName + "\" .\n");
+							}
+							if(updateList.contains("MiddleName")) {
+								sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> core:middleName \"" + sdbMiddleName + "\" .\n");
+							}
+							if(updateList.contains("MostSpecificType")) {
+								sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> vitro:mostSpecificType <" + sdbType + "> .\n");
+							}
+							sb.append("} \n");
+							sb.append("INSERT { \n");
+							if(updateList.contains("DisplayName")) {
+								sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:personLabel \"" + pb.getDisplayName().trim() + "\" .\n");
+							}
+							if(updateList.contains("PrimaryTitle")) {
+								sb.append("<" + this.vivoNamespace + "hasTitle-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#title> \"" + pb.getPrimaryTitle().trim() + "\" .\n");
+							}
+							if(updateList.contains("Mail")) {
+								sb.append("<" + this.vivoNamespace + "hasEmail-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#email> \"" + pb.getMail().trim() + "\" .\n");
+							}
+							if(updateList.contains("TelephoneNumber")) {
+								sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:officePhone \"" + pb.getTelephoneNumber().trim() + "\" .\n");
+							}
+							if(updateList.contains("FirstName")) {
+								sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#givenName> \"" + pb.getGivenName().trim() + "\" .\n");
+							}
+							if(updateList.contains("LastName")) {
+								sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#familyName> \"" + pb.getSn().trim() + "\" .\n");
+							}
+							if(updateList.contains("MiddleName")) {
+								sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> core:middleName \"" + pb.getMiddleName().trim() + "\" .\n");
+							}
+							
+							if(updateList.contains("MostSpecificType")) {
+								sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> vitro:mostSpecificType <" + pb.getPersonCode().trim() + "> .\n");
+							}
+							
+							sb.append("} \n");
+							sb.append("WHERE { \n");
+							if(updateList.contains("DisplayName")) {
+								sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:personLabel \"" + sdbLabel + "\" .\n");
+							}
+							if(updateList.contains("PrimaryTitle")) {
+								sb.append("<" + this.vivoNamespace + "hasTitle-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#title> \"" + sdbTitle + "\" .\n");
+							}
+							if(updateList.contains("Mail")) {
+								sb.append("<" + this.vivoNamespace + "hasEmail-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#email> \"" + sdbEmail + "\" .\n");
+							}
+							if(updateList.contains("TelephoneNumber")) {
+								sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> wcmc:officePhone \"" + sdbPhone + "\" .\n");
+							}
+							if(updateList.contains("FirstName")) {
+								sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#givenName> \"" + sdbFirstName + "\" .\n");
+							}
+							if(updateList.contains("LastName")) {
+								sb.append("<" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> <http://www.w3.org/2006/vcard/ns#familyName> \"" + sdbLastName + "\" .\n");
+							}
+							if(updateList.contains("MiddleName")) {
+								sb.append("OPTIONAL { <" + this.vivoNamespace + "hasName-" + pb.getCwid().trim() + "> core:middleName \"" + sdbMiddleName + "\" . }\n");
+							}
+							if(updateList.contains("MostSpecificType")) {
+								sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> vitro:mostSpecificType <" + sdbType + "> .\n");
+							}
+							sb.append("} \n");
+							
+							log.info("Update Query: " + sb.toString());
+							
+							
+							
+							runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
+							
+							this.updateCount = this.updateCount + 1;
+						}
 						
 						
 						if(!updateList.isEmpty() && updateList.contains("MostSpecificType")) {
 							log.info("Updating inference triple for mostSpecificType update");
-							SDBJenaConnect vivoJenaInf = this.jcf.getConnectionfromPool("vitro-kb-inf");
 							sb.setLength(0);
 							
 							sb.append("PREFIX vitro: <http://vitro.mannlib.cornell.edu/ns/vitro/0.7#> \n");
@@ -733,9 +1050,17 @@ public class AcademicFetchFromED {
 			                sb.append("}");
 			                
 			                log.info("Update Query for person type: " + sb.toString());
-			                runSparqlUpdateTemplate(sb.toString(), vivoJenaInf);
-
-							this.jcf.returnConnectionToPool(vivoJenaInf, "vitro-kb-inf");
+							if(ingestType.equals(IngestType.VIVO_API.toString())) {
+								log.info(this.vivoClient.vivoUpdateApi(sb.toString()));
+							} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+								TDBJenaConnect vivoJenaInf = this.tcf.getConnectionfromPool("dataSet");
+								runSparqlUpdateTemplate(sb.toString(), vivoJenaInf);
+								this.tcf.returnConnectionToPool(vivoJenaInf, "dataSet");
+							} else {
+								TDBJenaConnect vivoJenaInf = this.tcf.createNewDataSetConnectionForPool();
+								runTDBSparqlUpdateTemplate(sb.toString(), vivoJenaInf);
+								vivoJenaInf.getDataset().close();
+							}
 						}
 					}
 					
@@ -774,25 +1099,28 @@ public class AcademicFetchFromED {
 		        			}
 		                }
 		                sb.append("}}");
-		                
-		                log.info("Insert Query: " + sb.toString());
-		                runSparqlUpdateTemplate(sb.toString(), vivoJena);
+
+						if(ingestType.equals(IngestType.VIVO_API.toString())) {
+							log.info("Insert Query: " + sb.toString());
+							log.info(this.vivoClient.vivoUpdateApi(sb.toString()));
+						} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+							log.info("Insert Query: " + sb.toString());
+		                	runSparqlUpdateTemplate(sb.toString(), vivoJena);
+						} else {
+							runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
+						}
 	                }
+					if(ingestType.equals(IngestType.TDB_DIRECT.toString())) {
+						if(vivoJena!= null)
+							vivoJena.getDataset().close();
+					}
+					//Run inferencing on the updated triples
+					insertInferenceTriples(pb);
+	                
 					
-					if(vivoJena!= null)
-						this.jcf.returnConnectionToPool(vivoJena, "wcmcPeople");
-					
-					
-					
-					
-			} catch(IOException e) {
-				// TODO Auto-generated catch block
-				log.error("IOException: ",e);
+			} catch(Exception e) {
+				log.error("Api Exception" ,e);
 			}
-			
-			//Run inferencing on the updated triples
-			
-			insertInferenceTriples(pb);
 			
 			
 		}
@@ -835,24 +1163,164 @@ public class AcademicFetchFromED {
             sb.append("}");
 			
             log.info(sb.toString());
-			
-			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("wcmcPeople");
-			try {
-				runSparqlUpdateTemplate(sb.toString(), vivoJena);
-			} catch(IOException e) {
-				// TODO Auto-generated catch block
-				log.error("IOException: ",e);
+			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+				try {
+					log.info(this.vivoClient.vivoUpdateApi(sb.toString()));
+				} catch(Exception e) {
+					log.error("Api Exception", e);
+				}
+			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+				TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
+				try {
+					runSparqlUpdateTemplate(sb.toString(), vivoJena);
+				} catch(IOException e) {
+					log.error("IOException: ",e);
+				}
+				if(vivoJena!= null)
+					this.tcf.returnConnectionToPool(vivoJena, "dataSet");
+			} else {
+				TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
+				try {
+					runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
+				} catch(IOException e) {
+					log.error("IOException: ",e);
+				}
+				if(vivoJena!= null)
+					this.tcf.returnConnectionToPool(vivoJena, "dataSet");
 			}
-			if(vivoJena!= null)
-				this.jcf.returnConnectionToPool(vivoJena, "wcmcPeople");
-		}/**
+		}
+
+		/**
+		 * This function will sync all the personTypeCodes from ED with VIVO rdf types
+		 * @param pb The PeopleBean conatining all people information from ED
+		 */
+		private void syncCOIData(PeopleBean pb) {
+			
+			log.info("Syncing VIVO COI data from InfoED with VIVO for " + pb.getCwid());
+			if(this.vivoCoiMap.containsKey(pb.getCwid())) {
+				StringBuilder sb = new StringBuilder();
+				sb.append("WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n");
+				sb.append("DELETE { \n");
+				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> ?o .\n");
+				sb.append("} \n");
+				sb.append("INSERT { \n");
+				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> \"" + this.vivoCoiMap.get(pb.getCwid()) + "\" . \n");
+				sb.append("} \n");
+				sb.append("WHERE { \n");
+				sb.append("OPTIONAL {<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> ?o .}\n");
+				sb.append("}");
+				
+				log.info(sb.toString());
+				if(ingestType.equals(IngestType.VIVO_API.toString())) {
+					try {
+						log.info(this.vivoClient.vivoUpdateApi(sb.toString()));
+					} catch(Exception e) {
+						log.error("Api Exception", e);
+					}
+				} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+					TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
+					try {
+						runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
+					} catch(IOException e) {
+						log.error("IOException: ",e);
+					}
+					if(vivoJena!= null)
+						this.tcf.returnConnectionToPool(vivoJena, "dataSet");
+				}
+			} else {
+				log.info("No external relationships exist for " + pb.getCwid());
+				log.info("Check to see if any existing external relationships needs to be deleted");
+				StringBuilder sb = new StringBuilder();
+				sb.append("WITH <http://vitro.mannlib.cornell.edu/a/graph/wcmcPeople> \n");
+				sb.append("DELETE { \n");
+				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> ?o .\n");
+				sb.append("} \n");
+				sb.append("WHERE { \n");
+				sb.append("<" + this.vivoNamespace + "cwid-" + pb.getCwid().trim() + "> <http://weill.cornell.edu/vivo/ontology/wcmc#externalRelationships> ?o .\n");
+				sb.append("}");
+				
+				log.info(sb.toString());
+				if(ingestType.equals(IngestType.VIVO_API.toString())) {
+					try {
+						log.info(this.vivoClient.vivoUpdateApi(sb.toString()));
+					} catch(Exception e) {
+						log.error("Api Exception", e);
+					}
+				} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+					TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
+					try {
+						runTDBSparqlUpdateTemplate(sb.toString(), vivoJena);
+					} catch(IOException e) {
+						log.error("IOException: ",e);
+					}
+					if(vivoJena!= null)
+						this.tcf.returnConnectionToPool(vivoJena, "dataSet");
+				}
+			}
+		}
+
+		public void getCOIData() {
+			Connection con = this.mycf.getConnectionfromPool();
+			String cwid = null;
+			String coi = null;
+			
+			StringBuilder selectQuery = new StringBuilder();
+			selectQuery.append("select distinct m.cwid, \n");
+			selectQuery.append("concat(conflicts,'</div>') \n");
+			selectQuery.append("from v_coi_vivo_activity_group m \n");
+			selectQuery.append("join  ( \n");
+			selectQuery.append("select z.cwid, concat(\"<p class='conflicts-explanation'>Relationships and collaborations with for-profit and not-for-profit organizations are of vital importance to our faculty because these exchanges of scientific information foster innovation. As experts in their fields, WCM physicians and scientists are sought after by many organizations to consult and educate. WCM and its faculty make this information available to the public, thus creating a transparent environment.</p><div id='grid-container'>\",group_concat(distinct activityGroupData separator ''),\"\") as conflicts \n");
+			selectQuery.append("from (select cwid, concat(\"<div class='conflicts-description'><div class='tooltip'><span id='tooltip-what'><img class='whatisthisquestion' src='/images/externalRelationshipInfoButton.png' width='20'></span><span class='tooltiptext'>\",description,\"</span>\",vivo_pops_activity_group,\":</div></div><div class='conflicts-list'>\",replace(replace(group_concat(distinct entity order by entity separator '; '),\"(*)\",\"\"),\" ;\",\";\"),\"</div>\") as activityGroupData \n");
+			selectQuery.append("from v_coi_vivo_activity_group \n");
+			selectQuery.append("where vivo_pops_activity_group is not null \n");
+			selectQuery.append("group by cwid, vivo_pops_activity_group) z \n");
+			selectQuery.append("where z.cwid is not null \n");
+			selectQuery.append("group by z.cwid) p on p.cwid = m.cwid");
+
+			log.info(selectQuery.toString());
+			PreparedStatement ps = null;
+			java.sql.ResultSet rs = null;
+			try {	
+					ps = con.prepareStatement(selectQuery.toString());
+					ps.addBatch("set session group_concat_max_len = 90000");
+					ps.executeBatch();
+					rs = ps.executeQuery();
+					while(rs.next()) {
+						if(rs.getString(1) != null)
+							cwid = rs.getString(1);
+						coi = rs.getString(2);
+						
+						this.vivoCoiMap.put(cwid, coi);
+						
+					}
+				}
+			catch(SQLException e) {
+				log.error("SQLException" , e);
+			}
+			finally {
+				try{
+					if(ps!=null)
+						ps.close();
+					if(rs!=null)
+						rs.close();
+					if(con != null)
+						this.mycf.returnConnectionToPool(con);
+				}
+				catch(Exception e) {
+					log.error("Exception",e);
+				}
+				
+			}
+		}
+
+		/**
 		 * Template to fit in different JenaConnect queries.
 		 * @param sparqlQuery contains the query
 		 * @return ResultSet containing all the results
 		 * @throws IOException default exception thrown
 		 */
-		private ResultSet runSparqlTemplate(String sparqlQuery, SDBJenaConnect vivoJena) throws IOException {
-			ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery);		
+		private ResultSet runSparqlTemplate(String sparqlQuery, TDBJenaConnect vivoJena) throws IOException {
+			ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery, true);		
 			return rs;
 		}
 		
@@ -862,9 +1330,38 @@ public class AcademicFetchFromED {
 		 * @return ResultSet containing all the results
 		 * @throws IOException default exception thrown
 		 */
-		private void runSparqlUpdateTemplate(String sparqlQuery, SDBJenaConnect vivoJena) throws IOException {
+		private void runSparqlUpdateTemplate(String sparqlQuery, TDBJenaConnect vivoJena) throws IOException {
 			vivoJena.executeUpdateQuery(sparqlQuery, true);
 		}
-		
 
+		/**
+		 * Template to fit in different JenaConnect queries.
+		 * @param sparqlQuery contains the query
+		 * @param vivoJena connection to SDB jenas
+		 * @throws IOException default exception thrown
+		 */
+		private void runTDBSparqlUpdateTemplate(String sparqlQuery, TDBJenaConnect vivoJena) throws IOException {
+			Dataset ds = vivoJena.getDataset();
+			ds.begin(ReadWrite.WRITE);
+			GraphStore graphStore = GraphStoreFactory.create(ds);
+			UpdateRequest request = UpdateFactory.create(sparqlQuery);
+			UpdateProcessor proc = UpdateExecutionFactory.create(request, graphStore);
+			proc.execute();
+			ds.commit();
+		}
+
+		/**
+		 * Template to fit in different JenaConnect queries.
+		 * @param sparqlQuery contains the query
+		 * @return ResultSet containing all the results
+		 * @throws IOException default exception thrown
+		 */
+		private ResultSet runTDBSparqlTemplate(String sparqlQuery, TDBJenaConnect vivoJena) throws IOException {	
+			Dataset ds = vivoJena.getDataset();
+			ds.begin(ReadWrite.READ);
+			QueryExecution qExec = QueryExecutionFactory.create(sparqlQuery.toString(), ds);
+			ResultSet rs = qExec.execSelect();
+			ds.commit();
+			return rs;
+		}
 }

@@ -22,11 +22,17 @@ package reciter.connect.database.mssql;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import javax.inject.Inject;
+import javax.sql.DataSource;
+
+import com.mchange.v2.c3p0.ComboPooledDataSource;
+import com.mchange.v2.c3p0.PooledDataSource;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -55,7 +61,11 @@ public class MssqlConnectionFactory {
 	private String infoEdPassword;
 	private String infoEdUrl;
 	
-	private Map<String, Connection> connectionPool = new HashMap<String, Connection>(); 
+	private List<Connection> asmsConnectionPool = new ArrayList<>(); 
+	private List<Connection> infoEdConnectionPool = new ArrayList<>(); 
+
+	private static ComboPooledDataSource asmsDataSource;
+	private static ComboPooledDataSource infoedDataSource;
 	
 	/**
 	 * @param propertyFilePath the path of property file
@@ -70,7 +80,7 @@ public class MssqlConnectionFactory {
 		this.infoEdUsername = infoEdUsername;
 		this.infoEdPassword = env.getProperty("MSSQL_INFOED_DB_PASSWORD");
 		this.infoEdUrl = env.getProperty("MSSQL_INFOED_DB_URL");
-		initialize();
+		//initialize();
 	}
 	
 	/**
@@ -85,14 +95,14 @@ public class MssqlConnectionFactory {
 	 * This method initializes and creates and populates the connection pool
 	 */
 	private void initializeConnectionPool() {
-		while(!checkIfConnectionPoolIsFull()) {
+		while(!checkIfAsmsConnectionPoolIsFull()) {
 			log.info("MSSQLConnection pool is not full. Proceeding with adding new connection");
-			if(!this.connectionPool.containsKey("ASMS")) {
-				this.connectionPool.put("ASMS", createNewConnectionForPool("ASMS"));
-			}
-			if(!this.connectionPool.containsKey("INFOED")) {
-				this.connectionPool.put("INFOED", createNewConnectionForPool("INFOED"));
-			}
+			asmsConnectionPool.add(createNewConnectionForPool("ASMS"));
+		}
+
+		while(!checkIfInfoEdConnectionPoolIsFull()) {
+			log.info("MSSQLConnection pool is not full. Proceeding with adding new connection");
+			infoEdConnectionPool.add(createNewConnectionForPool("INFOED"));
 		}
 		log.info("MSSQLConnection pool is full");
 	}
@@ -101,32 +111,59 @@ public class MssqlConnectionFactory {
 	 * This method checks if connection Pool is full or not
 	 * @return boolean
 	 */
-	private synchronized boolean checkIfConnectionPoolIsFull() {
-		final int MAX_POOL_SIZE = 2;
-		if(this.connectionPool.size()<MAX_POOL_SIZE)
+	private synchronized boolean checkIfAsmsConnectionPoolIsFull() {
+		final int MAX_POOL_SIZE = 10;
+		if(this.asmsConnectionPool.size()<MAX_POOL_SIZE)
+			return false;
+		else
+			return true;
+	}
+
+	/**
+	 * This method checks if connection Pool is full or not
+	 * @return boolean
+	 */
+	private synchronized boolean checkIfInfoEdConnectionPoolIsFull() {
+		final int MAX_POOL_SIZE = 10;
+		if(this.infoEdConnectionPool.size()<MAX_POOL_SIZE)
 			return false;
 		else
 			return true;
 	}
 	
-	public synchronized Connection getConnectionfromPool(String application){
+	public synchronized Connection getInfoEdConnectionfromPool(String application){
 			
 			Connection con = null;
-			if(this.connectionPool.size()>0){
-				con = this.connectionPool.get(application);
-				this.connectionPool.remove(application);
+			if(this.infoEdConnectionPool.size()>0){
+				con = this.infoEdConnectionPool.get(0);
+				this.infoEdConnectionPool.remove(0);
 			}
 			return con;
 	}
+
+	public synchronized Connection getAsmsConnectionfromPool(String application){
+			
+		Connection con = null;
+		if(this.asmsConnectionPool.size()>0){
+			con = this.asmsConnectionPool.get(0);
+			this.asmsConnectionPool.remove(0);
+		}
+		return con;
+}
 	
 	public synchronized void returnConnectionToPool(String application, Connection connection)
     {
-        //Adding the connection from the client back to the connection pool
-        this.connectionPool.put(application, connection);
+		//Adding the connection from the client back to the connection pool
+		if(application.equals("ASMS"))
+			this.asmsConnectionPool.add(connection);
+		
+		if(application.equals("INFOED"))
+			this.infoEdConnectionPool.add(connection);
+
     }
 	
 	public void destroyConnectionPool() {
-		Collection<Connection> e = this.connectionPool.values();
+		Collection<Connection> e = this.asmsConnectionPool;
 		for(Connection con: e) {
 			try{
 			con.close();
@@ -135,7 +172,18 @@ public class MssqlConnectionFactory {
 				log.error("SQLException", sqle);
 			}
 		}
-		this.connectionPool.clear();
+		this.asmsConnectionPool.clear();
+
+		e = this.infoEdConnectionPool;
+		for(Connection con: e) {
+			try{
+			con.close();
+			}
+			catch(SQLException sqle){
+				log.error("SQLException", sqle);
+			}
+		}
+		this.infoEdConnectionPool.clear();
 		log.info("All MSsql connections were destroyed");
 	} 
 	
@@ -168,8 +216,55 @@ public class MssqlConnectionFactory {
 			} catch (ClassNotFoundException cnfe) {
 				log.error("ClassNotFoundException: " , cnfe);
 			}
-}
+		}
 		return con;
+	}
+
+	public void createC3PODatasourceForASMS() {
+		asmsDataSource = new ComboPooledDataSource();
+		//dataSource.setDriverClass("com.microsoft.sqlserver.jdbc.SQLServerDriver");
+		asmsDataSource.setJdbcUrl(this.url);
+		asmsDataSource.setUser(this.username);
+		asmsDataSource.setPassword(this.password);
+		
+		asmsDataSource.setMinPoolSize(2);
+		asmsDataSource.setMaxPoolSize(50);
+		asmsDataSource.setAcquireIncrement(5);
+	}
+
+	public void createC3PODatasourceForInfoEd() {
+		infoedDataSource = new ComboPooledDataSource();
+		//dataSource.setDriverClass("com.microsoft.sqlserver.jdbc.SQLServerDriver");
+		infoedDataSource.setJdbcUrl(this.infoEdUrl);
+		infoedDataSource.setUser(this.infoEdUsername);
+		infoedDataSource.setPassword(this.infoEdPassword);
+		
+		infoedDataSource.setMinPoolSize(2);
+		infoedDataSource.setMaxPoolSize(50);
+		infoedDataSource.setAcquireIncrement(5);
+	}
+
+	public static DataSource getASMSDataSource(){
+		return asmsDataSource;
+	}
+
+	public static DataSource getInfoedDataSource(){
+		return infoedDataSource;
+	}
+
+	public static void dataSourceCleanup(DataSource ds) {
+		// make sure it's a c3p0 PooledDataSource
+		if ( ds instanceof PooledDataSource)
+		{
+			PooledDataSource pds = (PooledDataSource) ds;
+			try {
+				pds.close();
+			} catch (SQLException e) {
+				log.error("Error closing connections: " , e);
+			}
+		}     
+		else
+		  log.info("Not a c3p0 PooledDataSource!");
 	}
 
 }

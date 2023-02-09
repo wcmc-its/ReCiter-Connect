@@ -205,7 +205,7 @@ public class PublicationFetch {
 		}
 		else {
 			this.con = this.mcf.getConnectionfromPool();
-			this.activePeople = edi.getPeopleInVivo(this.jcf);
+			this.activePeople = edi.getPeopleInVivo();
 			PublicationBean pb = new PublicationBean();
 			Set<AuthorBean> authors = new HashSet<AuthorBean>();
 			Iterator<String> it = this.activePeople.iterator();
