@@ -182,6 +182,7 @@ public class GrantsFetchFromED {
 						}
 					} catch(Exception e) {
 						log.error("Api Exception", e);
+
 					}
 				} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
 					SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
@@ -206,6 +207,7 @@ public class GrantsFetchFromED {
 					} catch(IOException e) {
 						log.error("IOException" ,e);
 					}
+
 				} else {
 					TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
 					try {
@@ -1982,23 +1984,21 @@ public class GrantsFetchFromED {
 			List<GrantBean> grant = new ArrayList<GrantBean>();
 			try {
 			StringBuilder selectQuery = new StringBuilder();
-			
-			selectQuery.append("select distinct v.CWID,v.Account_Number,x.Award_Number,REPLACE(CONVERT(NVARCHAR, begin_date, 106), ' ', '-') as begin_date,REPLACE(CONVERT(NVARCHAR, end_date, 106), ' ', '-') as end_date,replace(replace(replace(z.proj_title,char(13),' '),char(10),' '),'	','') as proj_title, z.unit_name, z.int_unit_code, z.program_type,z.Orig_Sponsor,");
-			selectQuery.append("case when z.Sponsor = z.Orig_Sponsor then null when z.Sponsor != z.Orig_Sponsor then z.Sponsor end as Subward_Sponsor,");
-			selectQuery.append("z.spon_code,case when z.Sponsor = z.Orig_Sponsor and z.Primary_PI_Flag = 'Y' then 'PrincipalInvestigatorRole' when z.Sponsor != z.Orig_Sponsor and z.Primary_PI_Flag = 'Y' then 'PrincipalInvestigatorSubawardRole' when z.Sponsor != z.Orig_Sponsor and z.Role_Category like '%PI' then 'CoPrincipalInvestigatorRole' when z.Role_Category like '%Co-investigator' then 'CoInvestigatorRole' else 'KeyPersonnelRole' end as Role ");
-			selectQuery.append("from vivo v left join ");
-			selectQuery.append("(select distinct cwid, Account_Number, max(Award_Number) as Award_Number from vivo where program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL group by cwid, Account_Number) x ");
-			selectQuery.append("on x.cwid = v.cwid and x.Account_Number = v.Account_Number left join ");
-			selectQuery.append("(select distinct cwid, Account_Number, min(Project_Period_Start) as begin_date from vivo where program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL group by cwid, Account_Number) y ");
-			selectQuery.append("on y.cwid = v.cwid and y.Account_Number = v.Account_Number left join ");
-			selectQuery.append("(select distinct cwid, Account_Number, max(Project_Period_End) as end_date, max(Sponsor) as Sponsor, max(Orig_Sponsor) as Orig_Sponsor, max(spon_code) as spon_code, max(proj_title) as proj_title, min(program_type) as program_type, min(unit_name) as unit_name, min(int_unit_code) as int_unit_code, max(Primary_PI_Flag) as Primary_PI_Flag, min(role_category) as Role_Category from vivo  group by cwid, Account_Number) z ");
-			selectQuery.append("on z.cwid = v.cwid and z.Account_Number = v.Account_Number ");
-			selectQuery.append("where v.cwid is not null and Confidential <> 'Y' and v.unit_name is not null and v.program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL ");
-			selectQuery.append("and v.cwid= '" + cwid + "' order by v.cwid, v.Account_Number");
-			
+
+			selectQuery.append("SELECT DISTINCT v.CWID, v.Account_Number, x.Award_Number, REPLACE(CONVERT(NVARCHAR, begin_date, 106), ' ', '-') AS begin_date, REPLACE(CONVERT(NVARCHAR, end_date, 106), ' ', '-') AS end_date, replace(replace(replace(z.proj_title, char(13), ' '), char(10), ' '), ' ', '') AS proj_title, z.unit_name, z.int_unit_code, z.program_type, z.Orig_Sponsor, coalesce(r1.ROLE, r2.ROLE, r3.ROLE, r4.ROLE, r5.ROLE) as ROLE FROM vivo v \n"); 
+			selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, 'PrincipalInvestigatorRole' AS ROLE FROM vivo WHERE cwid IS NOT NULL AND Confidential <> 'Y' AND unit_name IS NOT NULL AND program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL AND Sponsor = Orig_Sponsor AND Primary_PI_Flag = 'Y' ) r1 on r1.cwid = v.cwid AND r1.Account_Number = v.Account_Number \n"); 
+			selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, 'PrincipalInvestigatorSubawardRole' AS ROLE FROM vivo WHERE cwid IS NOT NULL AND Confidential <> 'Y' AND unit_name IS NOT NULL AND program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL AND Sponsor != Orig_Sponsor AND Primary_PI_Flag = 'Y' ) r2 on r2.cwid = v.cwid AND r2.Account_Number = v.Account_Number \n"); 
+			selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, 'CoPrincipalInvestigatorRole' AS ROLE FROM vivo WHERE cwid IS NOT NULL AND Confidential <> 'Y' AND unit_name IS NOT NULL AND program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL AND Role_Category like '%PI%' ) r3 on r3.cwid = v.cwid AND r3.Account_Number = v.Account_Number \n"); 
+			selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, 'CoInvestigatorRole' AS ROLE FROM vivo WHERE Confidential <> 'Y' AND unit_name IS NOT NULL AND program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL AND Role_Category = 'Co-investigator' ) r4 on r4.cwid = v.cwid AND r4.Account_Number = v.Account_Number  \n"); 
+			selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, 'KeyPersonnelRole' AS ROLE FROM vivo WHERE Confidential <> 'Y' AND unit_name IS NOT NULL AND program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL ) r5 on r5.cwid = v.cwid AND r5.Account_Number = v.Account_Number  \n"); 
+			selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, max(Award_Number) AS Award_Number FROM vivo WHERE program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL GROUP BY cwid, Account_Number) x ON x.cwid = v.cwid AND x.Account_Number = v.Account_Number  \n"); 
+			selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, min(Project_Period_Start) AS begin_date FROM vivo WHERE program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL GROUP BY cwid, Account_Number) y ON y.cwid = v.cwid AND y.Account_Number = v.Account_Number  \n"); 
+			selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, max(Project_Period_End) AS end_date, max(Sponsor) AS Sponsor, max(Orig_Sponsor) AS Orig_Sponsor, max(spon_code) AS spon_code, max(proj_title) AS proj_title, min(program_type) AS program_type, min(unit_name) AS unit_name, min(int_unit_code) AS int_unit_code FROM vivo GROUP BY cwid, Account_Number) z ON z.cwid = v.cwid AND z.Account_Number = v.Account_Number \n"); 
+			selectQuery.append("WHERE v.CWID IS NOT NULL AND Confidential <> 'Y' AND v.unit_name IS NOT NULL AND v.program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL AND (r1.CWID is not null OR r2.CWID is not null OR r3.CWID is not null OR r4.CWID is not null OR r5.CWID is not null)  \n"); 
+			selectQuery.append("AND v.cwid= '" + cwid + "'  \n"); 
+			selectQuery.append("ORDER BY v.CWID, v.Account_Number");				
+				
 			//log.info(selectQuery.toString());
-			
-			
 			
 				ps = this.infoEdCon.prepareStatement(selectQuery.toString());
 				rs = ps.executeQuery();
@@ -2084,20 +2084,20 @@ public class GrantsFetchFromED {
 			String contributor = null;
 			
 			StringBuilder selectQuery = new StringBuilder();
-			
-			selectQuery.append("select distinct v.CWID,v.Account_Number,x.Award_Number,begin_date,end_date,replace(replace(replace(z.proj_title,char(13),' '),char(10),' '),'	','') as proj_title, z.unit_name, z.int_unit_code, z.program_type,z.Orig_Sponsor, \n");
-			selectQuery.append("case when z.Sponsor = z.Orig_Sponsor then null when z.Sponsor != z.Orig_Sponsor then z.Sponsor end as Subward_Sponsor, \n");
-			selectQuery.append("z.spon_code,case when z.Sponsor = z.Orig_Sponsor and z.Primary_PI_Flag = 'Y' then 'PrincipalInvestigatorRole' when z.Sponsor != z.Orig_Sponsor and z.Primary_PI_Flag = 'Y' then 'PrincipalInvestigatorSubawardRole' when z.Sponsor != z.Orig_Sponsor and z.Role_Category like '%PI' then 'CoPrincipalInvestigatorRole' when z.Role_Category like '%Co-investigator' then 'CoInvestigatorRole' else 'KeyPersonnelRole' end as Role \n");
-			selectQuery.append("from vivo v left join \n");
-			selectQuery.append("(select distinct cwid, Account_Number, max(Award_Number) as Award_Number from vivo where program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL group by cwid, Account_Number) x \n");
-			selectQuery.append("on x.cwid = v.cwid and x.Account_Number = v.Account_Number left join \n");
-			selectQuery.append("(select distinct cwid, Account_Number, min(Project_Period_Start) as begin_date from vivo where program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL group by cwid, Account_Number) y \n");
-			selectQuery.append("on y.cwid = v.cwid and y.Account_Number = v.Account_Number left join \n");
-			selectQuery.append("(select distinct cwid, Account_Number, max(Project_Period_End) as end_date, max(Sponsor) as Sponsor, max(Orig_Sponsor) as Orig_Sponsor, max(spon_code) as spon_code, max(proj_title) as proj_title, min(program_type) as program_type, min(unit_name) as unit_name, min(int_unit_code) as int_unit_code, max(Primary_PI_Flag) as Primary_PI_Flag, min(role_category) as Role_Category from vivo  group by cwid, Account_Number) z \n");
-			selectQuery.append("on z.cwid = v.cwid and z.Account_Number = v.Account_Number \n");
-			selectQuery.append("where v.cwid is not null and Confidential <> 'Y' and v.unit_name is not null and v.program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL \n");
-			selectQuery.append("and v.Account_Number= '" + accountNumber + "' order by v.cwid, v.Account_Number");
 
+      selectQuery.append("SELECT DISTINCT v.CWID, v.Account_Number, x.Award_Number, REPLACE(CONVERT(NVARCHAR, begin_date, 106), ' ', '-') AS begin_date, REPLACE(CONVERT(NVARCHAR, end_date, 106), ' ', '-') AS end_date, replace(replace(replace(z.proj_title, char(13), ' '), char(10), ' '), ' ', '') AS proj_title, z.unit_name, z.int_unit_code, z.program_type, z.Orig_Sponsor, coalesce(r1.ROLE, r2.ROLE, r3.ROLE, r4.ROLE, r5.ROLE) as ROLE FROM vivo v \n"); 
+			selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, 'PrincipalInvestigatorRole' AS ROLE FROM vivo WHERE cwid IS NOT NULL AND Confidential <> 'Y' AND unit_name IS NOT NULL AND program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL AND Sponsor = Orig_Sponsor AND Primary_PI_Flag = 'Y' ) r1 on r1.cwid = v.cwid AND r1.Account_Number = v.Account_Number \n"); 
+			selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, 'PrincipalInvestigatorSubawardRole' AS ROLE FROM vivo WHERE cwid IS NOT NULL AND Confidential <> 'Y' AND unit_name IS NOT NULL AND program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL AND Sponsor != Orig_Sponsor AND Primary_PI_Flag = 'Y' ) r2 on r2.cwid = v.cwid AND r2.Account_Number = v.Account_Number \n"); 
+			selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, 'CoPrincipalInvestigatorRole' AS ROLE FROM vivo WHERE cwid IS NOT NULL AND Confidential <> 'Y' AND unit_name IS NOT NULL AND program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL AND Role_Category like '%PI%' ) r3 on r3.cwid = v.cwid AND r3.Account_Number = v.Account_Number \n"); 
+			selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, 'CoInvestigatorRole' AS ROLE FROM vivo WHERE Confidential <> 'Y' AND unit_name IS NOT NULL AND program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL AND Role_Category = 'Co-investigator' ) r4 on r4.cwid = v.cwid AND r4.Account_Number = v.Account_Number  \n"); 
+			selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, 'KeyPersonnelRole' AS ROLE FROM vivo WHERE Confidential <> 'Y' AND unit_name IS NOT NULL AND program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL ) r5 on r5.cwid = v.cwid AND r5.Account_Number = v.Account_Number  \n"); 
+			selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, max(Award_Number) AS Award_Number FROM vivo WHERE program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL GROUP BY cwid, Account_Number) x ON x.cwid = v.cwid AND x.Account_Number = v.Account_Number  \n"); 
+			selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, min(Project_Period_Start) AS begin_date FROM vivo WHERE program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL GROUP BY cwid, Account_Number) y ON y.cwid = v.cwid AND y.Account_Number = v.Account_Number  \n"); 
+			selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, max(Project_Period_End) AS end_date, max(Sponsor) AS Sponsor, max(Orig_Sponsor) AS Orig_Sponsor, max(spon_code) AS spon_code, max(proj_title) AS proj_title, min(program_type) AS program_type, min(unit_name) AS unit_name, min(int_unit_code) AS int_unit_code FROM vivo GROUP BY cwid, Account_Number) z ON z.cwid = v.cwid AND z.Account_Number = v.Account_Number \n"); 
+			selectQuery.append("WHERE v.CWID IS NOT NULL AND Confidential <> 'Y' AND v.unit_name IS NOT NULL AND v.program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL AND (r1.CWID is not null OR r2.CWID is not null OR r3.CWID is not null OR r4.CWID is not null OR r5.CWID is not null)  \n"); 
+			selectQuery.append("AND v.Account_Number= '" + accountNumber + "'  \n"); 
+			selectQuery.append("ORDER BY v.CWID, v.Account_Number");
+			
 			//log.info(selectQuery.toString());
 			PreparedStatement ps = null;
 			java.sql.ResultSet rs = null;
