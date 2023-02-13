@@ -1985,7 +1985,7 @@ public class GrantsFetchFromED {
 			try {
 			StringBuilder selectQuery = new StringBuilder();
 
-                        selectQuery.append("SELECT DISTINCT v.CWID, v.Account_Number, x.Award_Number, REPLACE(CONVERT(NVARCHAR, begin_date, 106), ' ', '-') AS begin_date, REPLACE(CONVERT(NVARCHAR, end_date, 106), ' ', '-') AS end_date, replace(replace(replace(z.proj_title, char(13), ' '), char(10), ' '), '  ', ' ') AS proj_title, z.unit_name, z.int_unit_code, z.program_type, z.Orig_Sponsor, case when z.Sponsor = z.Orig_Sponsor then null when z.Sponsor != z.Orig_Sponsor then z.Sponsor end as Subward_Sponsor, z.spon_code, coalesce(r1.ROLE, r2.ROLE, r3.ROLE, r4.ROLE, r5.ROLE) as ROLE FROM vivo v \n"); 
+                        selectQuery.append("SELECT DISTINCT v.CWID, v.Account_Number, x.Award_Number, REPLACE(CONVERT(NVARCHAR, begin_date, 106), ' ', '-') AS begin_date, REPLACE(CONVERT(NVARCHAR, end_date, 106), ' ', '-') AS end_date, replace(replace(z.proj_title, char(13), ' '), char(10), ' ') AS proj_title, z.unit_name, z.int_unit_code, z.program_type, z.Orig_Sponsor, case when z.Sponsor = z.Orig_Sponsor then null when z.Sponsor != z.Orig_Sponsor then z.Sponsor end as Subward_Sponsor, z.spon_code, coalesce(r1.ROLE, r2.ROLE, r3.ROLE, r4.ROLE, r5.ROLE) as ROLE FROM vivo v \n"); 
                         selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, 'PrincipalInvestigatorRole' AS ROLE FROM vivo WHERE cwid IS NOT NULL AND Confidential <> 'Y' AND unit_name IS NOT NULL AND program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL AND Sponsor = Orig_Sponsor AND Primary_PI_Flag = 'Y' ) r1 on r1.cwid = v.cwid AND r1.Account_Number = v.Account_Number \n"); 
                         selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, 'PrincipalInvestigatorSubawardRole' AS ROLE FROM vivo WHERE cwid IS NOT NULL AND Confidential <> 'Y' AND unit_name IS NOT NULL AND program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL AND Sponsor != Orig_Sponsor AND Primary_PI_Flag = 'Y' ) r2 on r2.cwid = v.cwid AND r2.Account_Number = v.Account_Number \n"); 
                         selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, 'CoPrincipalInvestigatorRole' AS ROLE FROM vivo WHERE cwid IS NOT NULL AND Confidential <> 'Y' AND unit_name IS NOT NULL AND program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL AND Role_Category like '%PI%' ) r3 on r3.cwid = v.cwid AND r3.Account_Number = v.Account_Number \n"); 
@@ -1998,7 +1998,8 @@ public class GrantsFetchFromED {
                         selectQuery.append("AND v.cwid= '" + cwid + "'  \n"); 
                         selectQuery.append("ORDER BY v.CWID, v.Account_Number");
 				
-				
+						selectQuery = selectQuery.trim().replaceAll("\\s+", " ");
+
 			//log.info(selectQuery.toString());
 			
 				ps = this.infoEdCon.prepareStatement(selectQuery.toString());
@@ -2086,7 +2087,7 @@ public class GrantsFetchFromED {
 			
 			StringBuilder selectQuery = new StringBuilder();
 
-                        selectQuery.append("SELECT DISTINCT v.CWID, v.Account_Number, x.Award_Number, REPLACE(CONVERT(NVARCHAR, begin_date, 106), ' ', '-') AS begin_date, REPLACE(CONVERT(NVARCHAR, end_date, 106), ' ', '-') AS end_date, replace(replace(replace(z.proj_title, char(13), ' '), char(10), ' '), '  ', ' ') AS proj_title, z.unit_name, z.int_unit_code, z.program_type, z.Orig_Sponsor, case when z.Sponsor = z.Orig_Sponsor then null when z.Sponsor != z.Orig_Sponsor then z.Sponsor end as Subward_Sponsor, z.spon_code, coalesce(r1.ROLE, r2.ROLE, r3.ROLE, r4.ROLE, r5.ROLE) as ROLE FROM vivo v \n"); 
+                        selectQuery.append("SELECT DISTINCT v.CWID, v.Account_Number, x.Award_Number, REPLACE(CONVERT(NVARCHAR, begin_date, 106), ' ', '-') AS begin_date, REPLACE(CONVERT(NVARCHAR, end_date, 106), ' ', '-') AS end_date, replace(replace(z.proj_title, char(13), ' '), char(10), ' ') AS proj_title, z.unit_name, z.int_unit_code, z.program_type, z.Orig_Sponsor, case when z.Sponsor = z.Orig_Sponsor then null when z.Sponsor != z.Orig_Sponsor then z.Sponsor end as Subward_Sponsor, z.spon_code, coalesce(r1.ROLE, r2.ROLE, r3.ROLE, r4.ROLE, r5.ROLE) as ROLE FROM vivo v \n"); 
                         selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, 'PrincipalInvestigatorRole' AS ROLE FROM vivo WHERE cwid IS NOT NULL AND Confidential <> 'Y' AND unit_name IS NOT NULL AND program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL AND Sponsor = Orig_Sponsor AND Primary_PI_Flag = 'Y' ) r1 on r1.cwid = v.cwid AND r1.Account_Number = v.Account_Number \n"); 
                         selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, 'PrincipalInvestigatorSubawardRole' AS ROLE FROM vivo WHERE cwid IS NOT NULL AND Confidential <> 'Y' AND unit_name IS NOT NULL AND program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL AND Sponsor != Orig_Sponsor AND Primary_PI_Flag = 'Y' ) r2 on r2.cwid = v.cwid AND r2.Account_Number = v.Account_Number \n"); 
                         selectQuery.append("LEFT JOIN (SELECT DISTINCT CWID, Account_Number, 'CoPrincipalInvestigatorRole' AS ROLE FROM vivo WHERE cwid IS NOT NULL AND Confidential <> 'Y' AND unit_name IS NOT NULL AND program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL AND Role_Category like '%PI%' ) r3 on r3.cwid = v.cwid AND r3.Account_Number = v.Account_Number \n"); 
@@ -2099,6 +2100,8 @@ public class GrantsFetchFromED {
                         selectQuery.append("AND v.Account_Number= '" + accountNumber + "'  \n"); 
                         selectQuery.append("ORDER BY v.CWID, v.Account_Number");
 			
+						selectQuery = selectQuery.trim().replaceAll("\\s+", " ");
+									
 			//log.info(selectQuery.toString());
 			PreparedStatement ps = null;
 			java.sql.ResultSet rs = null;
