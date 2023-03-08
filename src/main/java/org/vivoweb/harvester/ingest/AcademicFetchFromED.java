@@ -466,7 +466,7 @@ public class AcademicFetchFromED {
 				ptype.add("wcmc:Lecturer");
 				
 			}
-	        if(type != null && type.contains("academic-nonfaculty-fellow")) {
+	        if(type != null && type.contains("academic-nonfaculty-postdoc-fellow")) {
 				ptype.add("wcmc:Fellow");
 				
 			}
