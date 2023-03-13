@@ -529,7 +529,7 @@ public class AcademicFetchFromED {
 				ptype = "http://weill.cornell.edu/vivo/ontology/wcmc#Lecturer";
 				return ptype;
 			}
-	       else if(type != null && type.contains("academic-nonfaculty-fellow")) {
+	       else if(type != null && type.contains("academic-nonfaculty-postdoc-fellow")) {
 				ptype = "http://weill.cornell.edu/vivo/ontology/wcmc#Fellow";
 				return ptype;
 			}
