@@ -1998,7 +1998,7 @@ public class GrantsFetchFromED {
                         selectQuery.append("AND v.cwid= '" + cwid + "'  \n"); 
                         selectQuery.append("ORDER BY v.CWID, v.Account_Number");
 				
-						selectQuery = selectQuery.trim().replaceAll("\\s+", " ");
+						selectQuery = selectQuery.toString().trim().replaceAll("\\s+", " ");
 
 			//log.info(selectQuery.toString());
 			
@@ -2100,7 +2100,7 @@ public class GrantsFetchFromED {
                         selectQuery.append("AND v.Account_Number= '" + accountNumber + "'  \n"); 
                         selectQuery.append("ORDER BY v.CWID, v.Account_Number");
 			
-						selectQuery = selectQuery.trim().replaceAll("\\s+", " ");
+						selectQuery = selectQuery.toString().trim().replaceAll("\\s+", " ");
 									
 			//log.info(selectQuery.toString());
 			PreparedStatement ps = null;
