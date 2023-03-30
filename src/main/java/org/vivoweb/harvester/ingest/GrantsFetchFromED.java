@@ -1998,8 +1998,8 @@ public class GrantsFetchFromED {
                         selectQuery.append("AND v.cwid= '" + cwid + "'  \n"); 
                         selectQuery.append("ORDER BY v.CWID, v.Account_Number");
 				
-						selectQuery = selectQuery.toString().trim().replaceAll("\\s+", " ");
-
+           					selectQuery = new StringBuilder(selectQuery.toString().trim().replaceAll("\\s+", " "));
+				
 			//log.info(selectQuery.toString());
 			
 				ps = this.infoEdCon.prepareStatement(selectQuery.toString());
@@ -2099,8 +2099,8 @@ public class GrantsFetchFromED {
                         selectQuery.append("WHERE v.CWID IS NOT NULL AND Confidential <> 'Y' AND v.unit_name IS NOT NULL AND v.program_type <> 'Contract without funding' AND Project_Period_Start IS NOT NULL AND Project_Period_End IS NOT NULL AND (r1.CWID is not null OR r2.CWID is not null OR r3.CWID is not null OR r4.CWID is not null OR r5.CWID is not null)  \n"); 
                         selectQuery.append("AND v.Account_Number= '" + accountNumber + "'  \n"); 
                         selectQuery.append("ORDER BY v.CWID, v.Account_Number");
-			
-						selectQuery = selectQuery.toString().trim().replaceAll("\\s+", " ");
+
+           					selectQuery = new StringBuilder(selectQuery.toString().trim().replaceAll("\\s+", " "));
 									
 			//log.info(selectQuery.toString());
 			PreparedStatement ps = null;
