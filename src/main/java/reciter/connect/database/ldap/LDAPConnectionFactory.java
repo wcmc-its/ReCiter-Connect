@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Vector;
+import java.util.Arrays;
 
 import javax.inject.Inject;
 
@@ -229,7 +230,6 @@ public class LDAPConnectionFactory {
         	// Log additional SearchRequest properties
         	slf4jLogger.info("Search time limit: {} seconds", searchRequest.getTimeLimitSeconds());
         	slf4jLogger.info("Search size limit: {}", searchRequest.getSizeLimit());
-        	slf4jLogger.info("Search deref policy: {}", searchRequest.getDerefPolicy());
 	        
         	ASN1OctetString resumeCookie = null;
 	
