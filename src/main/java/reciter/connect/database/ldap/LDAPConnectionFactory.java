@@ -213,53 +213,53 @@ public class LDAPConnectionFactory {
 	 * LDAP
 	 * @return a {@code List} of {@code SearchResultEntry} objects.
 	 */
-     public List<SearchResultEntry> search(final String filter, final String base, SearchScope scope, String... attributes) {
-         LDAPConnection connection = null;
-         List<SearchResultEntry> entries = new ArrayList<>();
-         
-         // Log the search parameters for better visibility
-         slf4jLogger.info("Starting LDAP search with filter: {}", filter);
-         slf4jLogger.info("Search base DN: {}", base);
-         slf4jLogger.info("Search scope: {}", scope);
-         slf4jLogger.info("Requested attributes: {}", Arrays.toString(attributes));
-         
-         try {
-             SearchRequest searchRequest = new SearchRequest(base, scope, filter, attributes);
-             
-             // Log additional SearchRequest properties
-             slf4jLogger.info("Search time limit: {} seconds", searchRequest.getTimeLimitSeconds());
-             slf4jLogger.info("Search size limit: {}", searchRequest.getSizeLimit());
-             slf4jLogger.info("Search deref policy: {}", searchRequest.getDerefPolicy());
-             
-             ASN1OctetString resumeCookie = null;
-     
-             connection = getConnectionfromPool();
-             if (connection != null) {
-                 while (true) {
-                     searchRequest.setControls(new SimplePagedResultsControl(500, resumeCookie));
-                     SearchResult results = connection.search(searchRequest);
-                     
-                     // Log the SearchResult information
-                     slf4jLogger.info("SearchResult: {}", results);
-                     
-                     entries.addAll(results.getSearchEntries());
-                     SimplePagedResultsControl responseControl = SimplePagedResultsControl.get(results);
-                     if (responseControl.moreResultsToReturn()) {
-                         resumeCookie = responseControl.getCookie();
-                     } else {
-                         break;
-                     }
-                 }
-             }
-         } catch (LDAPSearchException e) {
-             slf4jLogger.error("LDAPSearchException", e);
-         } catch (LDAPException e) {
-             slf4jLogger.error("LDAPException", e);
-         } finally {
-             if (connection != null) {
-                 returnConnectionToPool(connection);
-             }
-         }
-         return entries;
-     }
+	public List<SearchResultEntry> search(final String filter, final String base, SearchScope scope, String... attributes) {
+    	LDAPConnection connection = null;
+    	List<SearchResultEntry> entries = new ArrayList<>();
+	    
+    	// Log the search parameters for better visibility
+    	slf4jLogger.info("Starting LDAP search with filter: {}", filter);
+    	slf4jLogger.info("Search base DN: {}", base);
+    	slf4jLogger.info("Search scope: {}", scope);
+    	slf4jLogger.info("Requested attributes: {}", Arrays.toString(attributes));
+	    
+    	try {
+        	SearchRequest searchRequest = new SearchRequest(base, scope, filter, attributes);
+	        
+        	// Log additional SearchRequest properties
+        	slf4jLogger.info("Search time limit: {} seconds", searchRequest.getTimeLimitSeconds());
+        	slf4jLogger.info("Search size limit: {}", searchRequest.getSizeLimit());
+        	slf4jLogger.info("Search deref policy: {}", searchRequest.getDerefPolicy());
+	        
+        	ASN1OctetString resumeCookie = null;
+	
+        	connection = getConnectionfromPool();
+        	if (connection != null) {
+            	while (true) {
+                	searchRequest.setControls(new SimplePagedResultsControl(500, resumeCookie));
+                	SearchResult results = connection.search(searchRequest);
+	                
+                	// Log the SearchResult information
+                	slf4jLogger.info("SearchResult: {}", results);
+	                
+                	entries.addAll(results.getSearchEntries());
+                	SimplePagedResultsControl responseControl = SimplePagedResultsControl.get(results);
+                	if (responseControl.moreResultsToReturn()) {
+                    	resumeCookie = responseControl.getCookie();
+                	} else {
+                    	break;
+                	}
+            	}
+        	}
+    	} catch (LDAPSearchException e) {
+        	slf4jLogger.error("LDAPSearchException", e);
+    	} catch (LDAPException e) {
+        	slf4jLogger.error("LDAPException", e);
+    	} finally {
+        	if (connection != null) {
+            	returnConnectionToPool(connection);
+        	}
+    	}
+    	return entries;
+	}
 }
