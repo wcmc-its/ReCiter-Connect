@@ -269,6 +269,12 @@ public class VivoPublicationsServiceImpl implements VivoPublicationsService {
                     sb.append(publicationUrl + " vitro:mostSpecificType core:ConferencePaper . \n");
                     sb.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
                 }
+                else if(articleFeature.getPublicationType().getPublicationTypeCanonical().equalsIgnoreCase("Guideline")) {
+                    sb.append(publicationUrl + " rdf:type wcmc:Guideline . \n");
+                    sb.append(publicationUrl + " vitro:mostSpecificType wcmc:Guideline . \n");
+                    sb.append(publicationUrl + " vitro:mostSpecificType wcmc:Guideline . \n");
+                    sb.append(publicationUrl + " rdf:type <http://www.w3.org/2002/07/owl#Thing> . \n");
+                }
                 else if(articleFeature.getPublicationType().getPublicationTypeCanonical().equalsIgnoreCase("Review")) {
                     sb.append(publicationUrl + " rdf:type core:Review . \n");
                     sb.append(publicationUrl + " vitro:mostSpecificType core:Review . \n");
