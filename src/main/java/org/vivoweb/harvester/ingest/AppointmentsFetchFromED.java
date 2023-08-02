@@ -193,10 +193,9 @@ public class AppointmentsFetchFromED {
 					log.info("No results found");
 				}
 			
-			//Takes care of Douglas J. Ballon appointments
-			filter = "(&(ou=faculty)(objectClass=weillCornellEduSORRoleRecord)(weillCornellEduCWID=" + cwid + ")(weillCornellEduEndDate>=19991231050000Z)(!(|(weillCornellEduSORID=10085791)(weillCornellEduSORID=2318)(weillCornellEduSORID=10002523)(weillCornellEduSORID=10075683)(weillCornellEduSORID=10016608)(weillCornellEduSORID=3001124))))";
-			
-			
+			//Takes care of Douglas J. Ballon appointments			
+			filter = "(&(ou=faculty)(objectClass=weillCornellEduSORRoleRecord)(weillCornellEduCWID=" + cwid + ")(!(weillCornellEduTitleCode=academic-prestart))(weillCornellEduEndDate>=19991231050000Z)(!(|(weillCornellEduSORID=10085791)(weillCornellEduSORID=2318)(weillCornellEduSORID=10002523)(weillCornellEduSORID=10075683)(weillCornellEduSORID=10016608)(weillCornellEduSORID=3001124))))";
+
 			
 			results = this.lcf.searchWithBaseDN(filter,"ou=faculty,ou=sors,dc=weill,dc=cornell,dc=edu");
 			
