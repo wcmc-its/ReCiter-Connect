@@ -173,7 +173,8 @@ public class AppointmentsFetchFromED {
 				String primaryAffiliation = null;
 				String primaryPosition = null;
 				
-				if (results != null) {
+				/* if (results != null) {*/
+				if (results != null && !results.isEmpty()) {
 					for (SearchResultEntry entry : results) {
 						if(entry.getAttributeValue("weillCornellEduPrimaryOrganization") != null) {
 							
@@ -199,7 +200,7 @@ public class AppointmentsFetchFromED {
 			
 			results = this.lcf.searchWithBaseDN(filter,"ou=faculty,ou=sors,dc=weill,dc=cornell,dc=edu");
 			
-			if (results != null) {
+			if (results != null && !results.isEmpty()) {
 				for (SearchResultEntry entry : results) {
 					if(entry.getAttributeValue("weillCornellEduCWID") != null) {
 						Date endDate = null;
