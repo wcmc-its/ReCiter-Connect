@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Vector;
+import java.util.Arrays;
 
 import javax.inject.Inject;
 
@@ -214,46 +215,51 @@ public class LDAPConnectionFactory {
 	 * @return a {@code List} of {@code SearchResultEntry} objects.
 	 */
 	public List<SearchResultEntry> search(final String filter, final String base, SearchScope scope, String... attributes) {
-		LDAPConnection connection = null;
-		List<SearchResultEntry> entries = new ArrayList<>();
-		try {
-			SearchRequest searchRequest = new SearchRequest(base, scope, filter, attributes);
-			ASN1OctetString resumeCookie = null;
-			// Perform a search to retrieve all users in the server, but only retrieving
-			// ten at a time.
-			int numSearches = 0;
-			int totalEntriesReturned = 0;
-			//connection = LDAPConnectionFactory.getConnection(propertyFilePath);
-			connection = getConnectionfromPool();
-			if(connection != null) {
-				while(true) {
-					searchRequest.setControls(new SimplePagedResultsControl(500, resumeCookie));
-					SearchResult results = connection.search(searchRequest);
-					numSearches++;
-   					totalEntriesReturned += results.getEntryCount();
-					entries.addAll(results.getSearchEntries());
-					SimplePagedResultsControl responseControl =SimplePagedResultsControl.get(results);
-					if (responseControl.moreResultsToReturn())
-					{
-						// The resume cookie can be included in the simple paged results
-						// control included in the next search to get the next page of results.
-						resumeCookie = responseControl.getCookie();
-					}
-					else
-					{
-						break;
-					}
-				}
-			}
-		} catch (LDAPSearchException e) {
-			slf4jLogger.error("LDAPSearchException", e);
-		} catch (LDAPException e) {
-			slf4jLogger.error("LDAPException", e);
-		} finally {
-			if (connection != null) {
-				returnConnectionToPool(connection);
-			}
-		}
-		return entries;
+    	LDAPConnection connection = null;
+    	List<SearchResultEntry> entries = new ArrayList<>();
+	    
+    	// Log the search parameters for better visibility
+    	slf4jLogger.info("Starting LDAP search with filter: {}", filter);
+    	slf4jLogger.info("Search base DN: {}", base);
+    	slf4jLogger.info("Search scope: {}", scope);
+    	slf4jLogger.info("Requested attributes: {}", Arrays.toString(attributes));
+	    
+    	try {
+        	SearchRequest searchRequest = new SearchRequest(base, scope, filter, attributes);
+	        
+        	// Log additional SearchRequest properties
+        	slf4jLogger.info("Search time limit: {} seconds", searchRequest.getTimeLimitSeconds());
+        	slf4jLogger.info("Search size limit: {}", searchRequest.getSizeLimit());
+	        
+        	ASN1OctetString resumeCookie = null;
+	
+        	connection = getConnectionfromPool();
+        	if (connection != null) {
+            	while (true) {
+                	searchRequest.setControls(new SimplePagedResultsControl(500, resumeCookie));
+                	SearchResult results = connection.search(searchRequest);
+	                
+                	// Log the SearchResult information
+                	slf4jLogger.info("SearchResult: {}", results);
+	                
+                	entries.addAll(results.getSearchEntries());
+                	SimplePagedResultsControl responseControl = SimplePagedResultsControl.get(results);
+                	if (responseControl.moreResultsToReturn()) {
+                    	resumeCookie = responseControl.getCookie();
+                	} else {
+                    	break;
+                	}
+            	}
+        	}
+    	} catch (LDAPSearchException e) {
+        	slf4jLogger.error("LDAPSearchException", e);
+    	} catch (LDAPException e) {
+        	slf4jLogger.error("LDAPException", e);
+    	} finally {
+        	if (connection != null) {
+            	returnConnectionToPool(connection);
+        	}
+    	}
+    	return entries;
 	}
 }
