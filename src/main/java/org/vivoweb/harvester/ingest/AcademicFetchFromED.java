@@ -144,7 +144,7 @@ public class AcademicFetchFromED {
 
 			List<PeopleBean> people = new ArrayList<>();
 			int noCwidCount = 0;
-			String filter = "(&(objectClass=eduPerson)(weillCornellEduPersonTypeCode=academic))";
+			String filter = "(&(objectClass=eduPerson)(!(weillCornellEduPersonTypeCode=academic-prestart))(weillCornellEduPersonTypeCode=academic))";
 			
 			List<SearchResultEntry> results = lcf.searchWithBaseDN(filter,"ou=people,dc=weill,dc=cornell,dc=edu");
 			
