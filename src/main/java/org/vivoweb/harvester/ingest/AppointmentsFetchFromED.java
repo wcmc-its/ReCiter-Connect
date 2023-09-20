@@ -482,7 +482,6 @@ public class AppointmentsFetchFromED {
 			String selectQuery = "SELECT DISTINCT id FROM wcmc_department where TRIM(title) = '" + deptName.trim() + "'";
 			
 				try {
-					log.info("Connection details: " + this.con);
 					st = this.con.createStatement();
 					rs = st.executeQuery(selectQuery);
 					if(rs!=null) { 
