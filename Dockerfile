@@ -1,4 +1,7 @@
 FROM openjdk:8-alpine
+# Install wget, curl, and ping (iputils)
+RUN apk add --no-cache wget curl iputils
+
 RUN mkdir -p /app
 WORKDIR /app
 ARG JAR_FILE=target/*.jar
