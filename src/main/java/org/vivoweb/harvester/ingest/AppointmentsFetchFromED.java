@@ -575,6 +575,13 @@ public class AppointmentsFetchFromED {
 			SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 			String strDate = sdf.format(now);
 			
+			//find out the total appointments other than interim 
+			long nonInterimAppointmentsCount = ob.getRoles().stream()
+                    .filter(role -> !role.isInterimAppointment() )
+                    .count();
+			log.info("nonInterimAppointmentCount for CWID: "+ob.getCwid() + "-" + nonInterimAppointmentsCount);
+
+			
 			StringBuilder sb = new StringBuilder();
 			sb.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
 			sb.append("PREFIX wcmc: <http://weill.cornell.edu/vivo/ontology/wcmc#> \n");
@@ -584,8 +591,9 @@ public class AppointmentsFetchFromED {
 			sb.append("PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n");
 			sb.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n");
 			sb.append("INSERT DATA { GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> { \n");
+			
 			for(RoleBean rb: ob.getRoles()) {
-				if(rb.isInterimAppointment()) {
+				if(rb.isInterimAppointment() && nonInterimAppointmentsCount <= 0) {
 					if(ob.getRoles().stream().anyMatch(role -> role.isActiveAppointment() == true)) {
 						log.info("Skipping interim appointment " + rb.getTitleCode());
 					} else {
@@ -909,7 +917,12 @@ public class AppointmentsFetchFromED {
 			ArrayList<RoleBean> rb = ob.getRoles();
 			ArrayList<EducationBean> ebean = ob.getEdu();
 			
-
+			//find out the total appointments other than interim 
+			long nonInterimAppointmentsCount = rb.stream()
+                    .filter(role -> !role.isInterimAppointment() )
+                    .count();
+			log.info("nonInterimAppointmentCount for CWID: "+cwid + "-" + nonInterimAppointmentsCount);
+			
 			//Checking for appointment updates
 			for(RoleBean role: rb) {
 				StringBuffer sb = new StringBuffer();
@@ -1014,7 +1027,7 @@ public class AppointmentsFetchFromED {
 					}
 				}
 				
-				else
+				else 
 				{
 					
 					
@@ -1107,7 +1120,7 @@ public class AppointmentsFetchFromED {
 						updateCount = updateCount + 1;
 					}
 					//Delete interim appointment
-					else if(role.isInterimAppointment()) {
+					else if(role.isInterimAppointment() && nonInterimAppointmentsCount > 0) {
 						StringBuffer updateQuery = new StringBuffer();
 						updateQuery.append("PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n");
 						updateQuery.append("PREFIX core: <http://vivoweb.org/ontology/core#> \n"); 
