@@ -48,7 +48,7 @@ public class EdDataInterfaceImpl implements EdDataInterface {
 				//"FILTER(REGEX(STR(?people),\"bhb9002\")) \n" +
 				"}}";
 
-		if(ingestType.equals(IngestType.VIVO_API.toString())) {
+		if(ingestType!=null && ingestType.equals(IngestType.VIVO_API.toString())) {
 			try{
 				String response = vivoClient.vivoQueryApi(sparqlQuery);
 				log.info(response);
@@ -64,7 +64,7 @@ public class EdDataInterfaceImpl implements EdDataInterface {
 			} catch(Exception  e) {
 				log.info("Api Exception", e);
 			}
-		} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())) {
+		} else if(ingestType!=null && ingestType.equals(IngestType.SDB_DIRECT.toString())) {
 			SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 			try {
 				ResultSet rs = vivoJena.executeSelectQuery(sparqlQuery, true);

@@ -567,7 +567,7 @@ public class AcademicFetchFromED {
 									"}}";
 
 			log.info(sparqlQuery);
-			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+			if(ingestType!=null && ingestType.equals(IngestType.VIVO_API.toString())) {
 				try {
 					String response = this.vivoClient.vivoQueryApi(sparqlQuery);
 					log.info(response);
@@ -577,7 +577,7 @@ public class AcademicFetchFromED {
 				} catch(Exception e) {
 					log.error("Api Exception", e);
 				}
-			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+			} else if(ingestType!=null && ingestType.equals(IngestType.SDB_DIRECT.toString())){
 
 				TDBJenaConnect vivoJena = this.tcf.getConnectionfromPool("dataSet");
 				
