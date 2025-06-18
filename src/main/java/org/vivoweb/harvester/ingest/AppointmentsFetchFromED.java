@@ -6,6 +6,10 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
@@ -210,6 +214,13 @@ public class AppointmentsFetchFromED {
 						rb.setDepartment(entry.getAttributeValue("weillCornellEduDepartment"));
 						rb.setTitleCode(entry.getAttributeValue("title"));
 						rb.setStartDate(entry.getAttributeValue("weillCornellEduStartDate").substring(0, 4));
+						ZonedDateTime currentUtc = ZonedDateTime.now(ZoneOffset.UTC);
+						log.info("CurrentUTC: ***********************************"+currentUtc);
+						log.info("startDate: ***********************************" +entry.getAttributeValue("weillCornellEduStartDate") );
+						DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmssX");
+						ZonedDateTime zonedDateTime = ZonedDateTime.parse(entry.getAttributeValue("weillCornellEduStartDate"), formatter);
+						ZonedDateTime utcStartDateTime = zonedDateTime.withZoneSameInstant(ZoneOffset.UTC);
+						log.info("StartDate IN UTC:************************" + utcStartDateTime);
 						String ldapEndDate = entry.getAttributeValue("weillCornellEduEndDate").substring(0, 4) + "-" + entry.getAttributeValue("weillCornellEduEndDate").substring(4, 6) + "-" + entry.getAttributeValue("weillCornellEduEndDate").substring(6, 8);
 						try {
 							log.info("Ldap end date: " + ldapEndDate);
@@ -254,8 +265,17 @@ public class AppointmentsFetchFromED {
 							else 
 								rb.setPrimaryAppointment(false);
 						}
-						
-						roles.add(rb); 
+						log.info("Current UTC: " + currentUtc);
+						log.info("Start Date UTC: " + utcStartDateTime);
+						log.info("End Date: " + rb.getEndDate());
+						log.info("utcStartDateTime.isAfter(currentUtc): " + utcStartDateTime.isAfter(currentUtc));
+						log.info("Appointment Status: "+ entry.getAttributeValue("weillCornellEduStatus"));
+						if((!utcStartDateTime.isAfter(currentUtc) && entry.getAttributeValue("weillCornellEduStatus").equalsIgnoreCase("expired"))|| rb.isActiveAppointment()) {
+							log.info("RoleBean contents:" + rb.toString());
+							roles.add(rb);
+						}
+						else
+							log.info("Skipping RoleBean contents:" + rb.toString() + "UTC Current Date:" + currentUtc + "StartDateUtc: "+ utcStartDateTime + "Active appointment: "+ rb.isActiveAppointment() +"EndDate : "+ rb.getEndDate());
 					}
 				}
 			}
@@ -2187,7 +2207,7 @@ public class AppointmentsFetchFromED {
 			sb.append("GRAPH <http://vitro.mannlib.cornell.edu/a/graph/wcmcOfa> { \n");
 			sb.append("<" + this.vivoNamespace + "cwid-" + ob.getCwid().trim() + "> ?p ?o . \n");
 			sb.append("}}");
-			if(ingestType.equals(IngestType.VIVO_API.toString())) {
+			if(ingestType!=null && ingestType.equals(IngestType.VIVO_API.toString())) {
 				try{
 					String response = this.vivoClient.vivoQueryApi(sb.toString());
 					log.info(response);
@@ -2197,7 +2217,7 @@ public class AppointmentsFetchFromED {
 				} catch(Exception  e) {
 					log.info("Api Exception", e);
 				}
-			} else if(ingestType.equals(IngestType.SDB_DIRECT.toString())){
+			} else if(ingestType!=null && ingestType.equals(IngestType.SDB_DIRECT.toString())){
 				SDBJenaConnect vivoJena = this.jcf.getConnectionfromPool("dataSet");
 				ResultSet rs = runSparqlTemplate(sb.toString(), vivoJena);
 				QuerySolution qs = rs.nextSolution();
